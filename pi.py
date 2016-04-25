@@ -1,3 +1,38 @@
+import os
+import io
+import re
+import tty
+import sys
+import json
+import math
+import socket
+import select
+import termios
+import hashlib
+import pathlib
+import threading
+import itertools
+import functools
+import collections
+import http.client
+import urllib.parse
+import logging.config
+from datetime import datetime
+from operator import attrgetter
+from contextlib import closing, contextmanager
+
+from requests import ConnectionError
+
+import toml
+
+from docker.client import Client as _DockerClient
+from docker.errors import APIError as DockerAPIError
+
+import click
+from click.core import Command, Option
+from click.types import IntParamType, StringParamType
+
+
 _CFG_DIR = '~/.pi'
 
 _COLORS = {
@@ -9,114 +44,6 @@ _COLORS = {
     '_darkgray': '\x1b[38;5;8m',
     '_reset': '\x1b[0m',
 }
-
-
-def bootstrap_pi_env():
-    import sys
-    if sys.version_info < (3, 4, 0):
-        print('PI requires Python version >= 3.4')
-        return 1
-
-    try:
-        import ensurepip
-    except ImportError:
-        print('Seems like your Python distribution is not complete,'
-              ' "ensurepip" library is missing. Here is possible cause:'
-              ' https://bugs.launchpad.net/bugs/1290847')
-        return 1
-
-    import os
-    import venv
-    import stat
-    import pathlib
-    import textwrap
-
-    cfg_dir = pathlib.Path(os.path.expanduser(_CFG_DIR))
-    env_dir = cfg_dir / 'env'
-    bin_dir = cfg_dir / 'bin'
-    x_mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-
-    print('Creating virtual environment in {0}...'.format(env_dir))
-    venv.create(str(env_dir), clear=True, with_pip=True)
-    print('Installing requirements...')
-    os.system('{pip} install -q click==1.1 docker-py==0.3.1 toml.py==0.1.2'
-              .format(pip=str(env_dir / 'bin' / 'pip')))
-    pi_src = """
-    #!{python}
-
-    import sys
-    sys.path.append('.')
-
-    try:
-        from pi import pi
-    except ImportError:
-        print("You're probably running pi outside of the project working "
-              "directory")
-        sys.exit(1)
-    else:
-        pi()
-    """.format(python=env_dir / 'bin' / 'python')
-    not bin_dir.exists() and bin_dir.mkdir()
-    pi_path = bin_dir / 'pi'
-    with pi_path.open('w+') as f:
-        f.write(textwrap.dedent(pi_src).strip() + '\n')
-    pi_path.chmod(pi_path.stat().st_mode | x_mode)
-    print(
-        '{_green}\u2714 TODO:{_reset}'
-        ' Please add "{_yellow}{bin_dir}{_reset}"'
-        ' to the {_magenta}PATH{_reset} variable in your OS environment'
-        .format(bin_dir=bin_dir, **_COLORS)
-    )
-
-
-if __name__ == '__main__':
-    import sys
-    sys.exit(bootstrap_pi_env())
-
-
-import os
-import io
-import re
-import tty
-import sys
-import pwd
-import json
-import uuid
-import math
-import queue
-import socket
-import select
-import termios
-import hashlib
-import pathlib
-import tarfile
-import platform
-import tempfile
-import threading
-import itertools
-import functools
-import subprocess
-import collections
-import unicodedata
-import http.client
-import urllib.parse
-import logging.config
-import concurrent.futures
-from datetime import datetime
-from operator import attrgetter
-from contextlib import closing, contextmanager
-
-from requests import ConnectionError
-
-import toml
-
-from docker.client import Client as _DockerClient
-from docker.client import APIError as DockerAPIError
-
-import click
-from click.core import Command, Option
-from click.types import IntParamType, StringParamType, BOOL, INT
-
 
 CFG_DIR = pathlib.Path(os.path.expanduser(_CFG_DIR))
 
@@ -292,28 +219,8 @@ def _raw_stdin(cbreak=True):
 
 class DockerClient(_DockerClient):
 
-    def __init__(self, domain, port):
-        base_url = 'tcp://{0}:{1}'.format(domain, port)
-        super(DockerClient, self).__init__(base_url, version='1.12')
-
-    def _stream_helper(self, response):
-        fp = response.raw._fp.fp
-        # with closing(response.raw):
-        try:
-            while True:
-                size = int(fp.readline().strip(), 16)
-                if not size:
-                    break
-                yield fp.read(size + 2)[:-2]
-        except:
-            # interrupted read, closing connection
-            response.raw.close()
-            raise
-        else:
-            # this will release connection
-            response.close()
-
-    def attach_socket(self, container, params=None, ws=False):
+    def attach_socket_raw(self, container, params=None):
+        """Returns real writable socket, usable to send stdin"""
         if params is None:
             params = {'stdout': 1, 'stderr': 1, 'stream': 1}
 
@@ -330,60 +237,10 @@ class DockerClient(_DockerClient):
         resp.begin()
         return conn.sock
 
-    def resize(self, container, width, height):
-        if isinstance(container, dict):
-            container = container['Id']
 
-        params = urllib.parse.urlencode({'w': width, 'h': height})
-
-        res = self._post(self._url('/containers/{0}/resize?{1}'
-                                   .format(container, params)))
-        self._raise_for_status(res)
-
-    def push(self, repository, tag=None, stream=False):
-        from docker.auth import auth
-        from docker.utils import utils
-
-        if not tag:
-            repository, tag = utils.parse_repository_tag(repository)
-        registry, repo_name = auth.resolve_repository_name(repository)
-        if repo_name.count(':') == 1:
-            repository, tag = repository.rsplit(':', 1)
-
-        params = {'tag': tag}
-
-        url = self._url('/images/{0}/push'.format(repository))
-        response = self._post_json(url, None, params=params, stream=stream)
-        if stream:
-            return self._stream_helper(response)
-        else:
-            return self._result(response)
-
-    def remove_container(self, container, v=False, force=False):
-        if isinstance(container, dict):
-            container = container.get('Id')
-        params = {'v': v, 'force': force}
-        res = self._delete(self._url("/containers/" + container),
-                           params=params)
-        self._raise_for_status(res)
-
-    def build_context(self, context, tag, nocache=False, rm=False,
-                      timeout=None):
-        response = self._post(
-            self._url('/build'),
-            data=context,
-            params={
-                't': tag,
-                'remote': None,
-                'q': False,
-                'nocache': nocache,
-                'rm': rm
-            },
-            headers={'Content-Type': 'application/tar'},
-            stream=True,
-            timeout=timeout,
-        )
-        return self._stream_helper(response)
+def docker_client(domain, port):
+    return DockerClient('tcp://{0}:{1}'.format(domain, port),
+                        version='1.21')
 
 
 def _lines_writer(output_queue):
@@ -416,12 +273,6 @@ def _read_line(sock):
         return result[0]
 
 
-def _assert_watchman_error(result):
-    if 'error' in result:
-        click.echo('Watchman error: {0}'.format(result['error']))
-        sys.exit()
-
-
 class expr(object):
 
     @classmethod
@@ -450,117 +301,11 @@ class expr(object):
             return ['dirname', name]
 
 
-def watchman(path, expr, queue, exit_event):
-    try:
-        raw_result = subprocess.check_output(['watchman', 'get-sockname'])
-    except OSError as e:
-        click.echo('Can\'t call "watchman" service, make sure that Watchman '
-                   'is installed on your system')
-        log.debug('Watchman call error: %s', e)
-        return
-
-    result = json.loads(raw_result.decode('utf-8'))
-    if result['version'] < '3.1':
-        click.echo('{_red}Please upgrade Watchman to the version >= 3.1'
-                   'in order to use "reload" feature{_reset}'.format(**_COLORS))
-        return
-
-    error = result.get('error')
-    if error is not None:
-        click.echo('{_red}Can\'t watch files for changes. '
-                   'Please resolve issue specified below:{_reset}\n{}'
-                   .format(error, **_COLORS))
-        return
-
-    with closing(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)) as sock:
-        sock.connect(result['sockname'])
-
-        sock.sendall(json.dumps(['watch', path]).encode('utf-8') + b'\n')
-        _assert_watchman_error(json.loads(_read_line(sock).decode('utf-8')))
-
-        sock.sendall(json.dumps(['clock', path]).encode('utf-8') + b'\n')
-        clock_response = json.loads(_read_line(sock).decode('utf-8'))
-        _assert_watchman_error(clock_response)
-        clock = clock_response['clock']
-
-        query = {
-            'since': clock,
-            'expression': expr,
-            'fields': ['name'],
-        }
-
-        sock.sendall(json.dumps(['subscribe', path, uuid.uuid4().hex, query])
-                     .encode('utf-8') + b'\n')
-        _assert_watchman_error(json.loads(_read_line(sock).decode('utf-8')))
-
-        lines_queue = collections.deque()
-        lines_writer = _lines_writer(lines_queue)
-        lines_writer.send(None)  # gen start
-        while True:
-            if exit_event.is_set():
-                break
-            if any(select.select([sock], [], [], .2)):
-                data = sock.recv(4096)
-                lines_writer.send(data)
-                while True:
-                    try:
-                        line = lines_queue.popleft()
-                    except IndexError:
-                        break
-                    else:
-                        result = json.loads(line.decode('utf-8'))
-                        _assert_watchman_error(result)
-                        queue.put(result['files'])
-
-    log.debug('watchman thread exited')
-
-
-def reloader(reload_conf, func, args, kwargs):
-    exit_event = kwargs.pop('_exit_event')
-
-    files_queue = queue.Queue()
-    files_queue.put([])  # for the first run
-
-    func_exit_event = threading.Event()
-
-    path = reload_conf['path']
-    expr = reload_conf['expr']
-
-    watch_thread = _spawn(watchman, [path, expr, files_queue, exit_event])
-
-    func_thread = None
-    while True:
-        # signal from the outside to exit
-        if exit_event.is_set():
-            if func_thread is not None and func_thread.is_alive():
-                func_exit_event.set()
-                func_thread.join()
-            watch_thread.join()
-            break
-
-        # we have changes, optionally kill and start new process
-        try:
-            files_queue.get(True, .2)
-        except queue.Empty:
-            continue
-        else:
-            if func_thread is not None and func_thread.is_alive():
-                func_exit_event.set()
-                func_thread.join()
-            func_exit_event.clear()
-            func_thread = _spawn(func, args, dict(kwargs,
-                                                  _exit_event=func_exit_event))
-            continue
-
-
-def start(func, args, reload_conf=None, ignore_cbrake=False):
+def start(func, args, ignore_cbrake=False):
     exit_event = threading.Event()
     with _raw_stdin(not ignore_cbrake) as tty_fd:
         kwargs = dict(_exit_event=exit_event, _tty_fd=tty_fd)
-        if reload_conf is not None:
-            thread = _spawn(reloader, [reload_conf, func, args, kwargs])
-        else:
-            thread = _spawn(func, args, kwargs)
+        thread = _spawn(func, args, kwargs)
         try:
             while True:
                 # using timeout to avoid main process blocking
@@ -609,7 +354,7 @@ class DockerCommand(Command):
 
     def invoke(self, ctx):
         kwargs = ctx.params.copy()
-        docker = DockerClient(*kwargs.pop('docker_host'))
+        docker = docker_client(*kwargs.pop('docker_host'))
         _is_up_or_exit(docker)
         ctx.invoke(self.callback, docker, **kwargs)
 
@@ -652,7 +397,7 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
     volume_bindings = {}
     for host_path, dest_path, mode in volumes:
         container_volumes.append(dest_path)
-        volume_bindings[host_path] = '{0}:{1}'.format(dest_path, mode)
+        volume_bindings[host_path] = {'bind': dest_path, 'mode': mode}
 
     container_ports = []
     port_bindings = {}
@@ -680,7 +425,9 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
 
     try:
         try:
-            client.start(container, volume_bindings, port_bindings,
+            client.start(container,
+                         binds=volume_bindings,
+                         port_bindings=port_bindings,
                          links=link_bindings)
         except DockerAPIError as e:
             click.echo(e.explanation)
@@ -693,7 +440,7 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
 
         attach_params = {'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
 
-        with closing(client.attach_socket(container, attach_params)) as sock:
+        with closing(client.attach_socket_raw(container, attach_params)) as sock:
             input_thread = _spawn(_container_input, [_tty_fd, sock, _exit_event])
             output_thread = _spawn(_container_output, [sock, process_exit])
             while True:
@@ -722,7 +469,6 @@ class DockerShellCommand(Command):
 
     def __init__(self, **kwargs):
         self.default_image = kwargs.pop('default_image', None)
-        self.reload_conf = kwargs.pop('reload_conf', None)
         self.ignore_cbrake = kwargs.pop('ignore_cbrake', False)
         super(DockerShellCommand, self).__init__(**kwargs)
         self.params.append(Option(
@@ -738,14 +484,11 @@ class DockerShellCommand(Command):
             help='Docker image',
             required=True,
         ))
-        if self.reload_conf is not None:
-            self.params.append(Option(['--reload'], is_flag=True))
 
     def invoke(self, ctx):
         kwargs = ctx.params.copy()
         host = kwargs.pop('docker_host')
         image = kwargs.pop('docker_image')
-        reload_ = kwargs.pop('reload', False) if self.reload_conf else None
 
         user = (conf2(ctx, 'env.user', None) or
                 '{0}:{1}'.format(os.getuid(), os.getgid()))
@@ -789,9 +532,7 @@ class DockerShellCommand(Command):
                     ip = '0.0.0.0' if bind_all else '127.0.0.1'
                     ports.append((ip, port, port))
 
-        reload_conf = self.reload_conf if reload_ else None
-
-        client = DockerClient(*host)
+        client = docker_client(*host)
         _is_up_or_exit(client)
 
         missing = _missing_links(client, links.values())
@@ -805,7 +546,6 @@ class DockerShellCommand(Command):
                 docker_run,
                 [client, image, command, environ, user, work_dir, volumes,
                  ports, links],
-                reload_conf=reload_conf,
                 ignore_cbrake=self.ignore_cbrake,
             )
             if exit_code:
@@ -905,11 +645,6 @@ def _tag_from_hash(docker_files, image_name):
         with open(docker_file, 'rb') as f:
             h.update(f.read())
     return '{name}:{tag}'.format(name=image_name, tag=h.hexdigest()[:12])
-
-
-# def _tag_from_hg_id(image_name):
-#     app_version = subprocess.check_output(['hg', 'id', '--id']).strip()
-#     return '{name}:{tag}'.format(name=image_name, tag=app_version)
 
 
 ENV_IMAGE = 'reg.local/test/env'
@@ -1096,3 +831,7 @@ def build_env(docker, docker_file, docker_image, no_cache):
 @pi.command('test', cls=DockerShellCommand, default_image=ENV_IMAGE_TAG)
 def pi_test(runner):
     runner(['python3.4', '-c', 'print("Hello")'])
+
+
+if __name__ == '__main__':
+    pi()
