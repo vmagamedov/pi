@@ -1,0 +1,29 @@
+- hosts: app
+  gather_facts: false
+  tasks:
+    - name: bootstrap
+      raw: apt-get install -y python2.7
+    - name: gather facts
+      setup:
+
+    - name: setting timezone to Europe/Kiev
+      file: src=/usr/share/zoneinfo/Europe/Kiev dest=/etc/localtime state=link force=yes
+
+    - name: generate locale en_US.UTF-8
+      locale_gen: name=en_US.UTF-8
+
+    - name: generate locale ru_RU.UTF-8
+      locale_gen: name=ru_RU.UTF-8
+
+    - name: generate locale ru_UA.UTF-8
+      locale_gen: name=ru_UA.UTF-8
+
+    - name: updating apt repository cache
+      apt: update_cache=yes
+
+    - name: installing ubuntu packages
+      apt: name={{item}}
+      with_items:
+        - build-essential
+        - python-dev
+        - python-pip
