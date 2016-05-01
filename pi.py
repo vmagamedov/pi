@@ -5,6 +5,7 @@ import tty
 import sys
 import json
 import math
+import codecs
 import socket
 import select
 import termios
@@ -24,6 +25,7 @@ from contextlib import closing, contextmanager
 from requests import ConnectionError
 
 import toml
+import yaml
 
 from docker.client import Client as _DockerClient
 from docker.errors import APIError as DockerAPIError
@@ -833,5 +835,55 @@ def pi_test(runner):
     runner(['python3.4', '-c', 'print("Hello")'])
 
 
+def setup_groups(groups):
+    root = click.Group()
+    mapping = {}
+    for parts in groups:
+        parent = root
+        key = tuple()
+        for part in parts:
+            key += (part,)
+            if key not in mapping:
+                group = mapping[key] = click.Group(part)
+                parent.add_command(group)
+                parent = group
+            else:
+                parent = mapping[key]
+    return root, mapping
+
+
+def setup_command(name, data):
+    return click.Command(name)
+
+
+def setup_cli():
+    with codecs.open('pi.yaml', encoding='utf-8') as f:
+        pi_yaml = yaml.load(f.read())
+
+    groups = set()
+    commands = dict()
+
+    commands_data = pi_yaml.get('commands', {})
+    for command_path, command_data in commands_data.items():
+        command_parts = tuple(command_path.split('.'))
+        group_parts, command_name = command_parts[:-1], command_parts[-1]
+        assert command_parts not in groups
+        assert group_parts not in commands
+        if group_parts:
+            groups.add(group_parts)
+        commands[command_parts] = command_data
+
+    root, mapping = setup_groups(groups)
+
+    for command_parts, command_data in commands.items():
+        group_parts, command_name = command_parts[:-1], command_parts[-1]
+        parent = mapping[group_parts]
+        command = setup_command(command_name, command_data)
+        parent.add_command(command)
+
+    return root
+
+
 if __name__ == '__main__':
-    pi()
+    cli = setup_cli()
+    cli()
