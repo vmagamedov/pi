@@ -32,8 +32,7 @@ from docker.errors import APIError as DockerAPIError
 
 import click
 from click.core import Command, Option
-from click.types import IntParamType, StringParamType
-
+from click.types import INT, IntParamType, StringParamType, BOOL, STRING
 
 _CFG_DIR = '~/.pi'
 
@@ -852,8 +851,40 @@ def setup_groups(groups):
     return root, mapping
 
 
+TYPES_MAP = {
+    'str': STRING,
+    'int': INT,
+    'bool': BOOL,
+}
+
+
+def parse_attrs(attrs):
+    d = dict(i.split('=') for i in attrs.split())
+    type_ = TYPES_MAP[d.pop('type', 'str')]
+    default = d.pop('default', None)
+    assert not d, d
+    return {'type': type_, 'default': default}
+
+
 def setup_command(name, data):
-    return click.Command(name)
+    args = data.get('args', [])
+    options = data.get('options', [])
+
+    params = []
+    for arg in args:
+        (arg_name, attrs), = arg.items()
+        arg_kwargs = parse_attrs(attrs)
+        params.append(click.Argument([arg_name], **arg_kwargs))
+    for opt in options:
+        (opt_name, attrs), = opt.items()
+        opt_kwargs = parse_attrs(attrs)
+        opt_decl = ('-' if len(opt_name) == 1 else '--') + opt_name
+        params.append(click.Option([opt_decl], **opt_kwargs))
+
+    def cb(**kw):
+        print(kw)
+
+    return click.Command(name, params=params, callback=cb)
 
 
 def setup_cli():
