@@ -888,8 +888,10 @@ def setup_command(name, data):
 
 
 def setup_cli():
-    with codecs.open('pi.yaml', encoding='utf-8') as f:
-        pi_yaml = yaml.load(f.read())
+    pi_yaml = {}
+    if os.path.exists('pi.yaml'):
+        with codecs.open('pi.yaml', encoding='utf-8') as f:
+            pi_yaml = yaml.load(f.read()) or {}
 
     groups = set()
     commands = dict()
@@ -913,8 +915,3 @@ def setup_cli():
         parent.add_command(command)
 
     return root
-
-
-if __name__ == '__main__':
-    cli = setup_cli()
-    cli()
