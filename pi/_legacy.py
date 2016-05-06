@@ -1,9 +1,7 @@
 import os
 import io
-import re
 import sys
 import json
-import math
 import socket
 import select
 import hashlib
@@ -25,6 +23,7 @@ import click
 from click.core import Command, Option
 from click.types import IntParamType, StringParamType
 
+from .utils import format_size
 from .client import Client, APIError
 from .client import echo_download_progress, echo_build_progress
 from .console import raw_stdin, COLORS
@@ -162,25 +161,6 @@ def _spawn(func, args=(), kwargs=None):
     thread = _Thread(target=func, args=args, kwargs=kwargs)
     thread.start()
     return thread
-
-
-def _format_size(value):
-    units = {0: 'B', 1: 'kB', 2: 'MB', 3: 'GB', 4: 'TB', 5: 'PB'}
-
-    pow_ = 0
-    while value >= 1000:
-        value = float(value) / 1000
-        pow_ += 1
-
-    precision = 3 - int(math.floor(math.log10(value))) if value > 1 else 0
-    unit = units.get(pow_, None) or '10^{} B'.format(pow_)
-    size = (
-        '{{value:.{precision}f}}'
-        .format(precision=precision)
-        .format(value=value, unit=unit)
-        .rstrip('.0')
-    )
-    return '{} {}'.format(size, unit)
 
 
 def docker_client(domain, port):
@@ -644,7 +624,7 @@ def image_list(docker):
                 line += '{_darkgray} ID:{id} {size} {created}{_reset}'.format(
                     id=tag.id,
                     name=tag.name,
-                    size=_format_size(tag.size),
+                    size=format_size(tag.size),
                     created=tag.created.strftime('%Y-%m-%d %H:%M'),
                     **COLORS
                 )
