@@ -27,6 +27,7 @@ from click.types import IntParamType, StringParamType
 
 from .tty import raw_stdin
 from .client import Client, APIError
+from .client import echo_download_progress, echo_build_progress
 
 
 _CFG_DIR = '~/.pi'
@@ -667,46 +668,16 @@ def _match_image_alias(ctx, value):
     return value
 
 
-def _echo_streamed_progress(output):
-    last_id = None
-    for line in output:
-        log.debug(line)
-        progress = json.loads(line.decode('utf-8'))
-
-        progress_id = progress.get('id')
-        if last_id:
-            if progress_id == last_id:
-                sys.stdout.write('\x1b[2K\r')
-            elif not progress_id or progress_id != last_id:
-                sys.stdout.write('\n')
-        last_id = progress_id
-
-        if progress_id:
-            sys.stdout.write('{}: '.format(progress_id))
-        sys.stdout.write(progress.get('status') or progress.get('error') or '')
-
-        progress_bar = progress.get('progress')
-        if progress_bar:
-            sys.stdout.write(' ' + progress_bar)
-
-        if not progress_id:
-            sys.stdout.write('\n')
-        sys.stdout.flush()
-    if last_id:
-        sys.stdout.write('\n')
-        sys.stdout.flush()
-
-
 @pi_image.command('pull', cls=DockerCommand)
 @click.argument('docker-image', callback=_match_image_alias)
 def image_pull(docker, docker_image):
-    _echo_streamed_progress(docker.pull(docker_image, stream=True))
+    echo_download_progress(docker.pull(docker_image, stream=True))
 
 
 @pi_image.command('push', cls=DockerCommand)
 @click.argument('docker-image', callback=_match_image_alias)
 def image_push(docker, docker_image):
-    _echo_streamed_progress(docker.push(docker_image, stream=True))
+    echo_download_progress(docker.push(docker_image, stream=True))
 
 
 @pi_image.command('shell', cls=DockerCommand)
@@ -744,32 +715,6 @@ def _read_docker_files(docker_files):
     return df
 
 
-def _build_progress(docker, output):
-    latest_container = None
-    try:
-        for line in output:
-            log.debug(line)
-            status = json.loads(line.decode('utf-8'))
-            if 'stream' in status:
-                click.echo(status['stream'], nl=False)
-                match = re.search(u'Running in ([0-9a-f]+)', status['stream'])
-                if match:
-                    latest_container = match.group(1)
-            elif 'error' in status:
-                click.echo(status['error'])
-    except BaseException as original_exc:
-        try:
-            if latest_container is not None:
-                click.echo('Stopping current container {}...'
-                           .format(latest_container))
-                docker.stop(latest_container, 5)
-                docker.remove_container(latest_container)
-        except:
-            log.exception('Failed to delete current container')
-        finally:
-            raise original_exc
-
-
 @build.command('env', cls=DockerCommand)
 @click.option('--docker-file', default=ENV_DOCKER_FILE, show_default=True)
 @click.option('--docker-image', default=ENV_IMAGE_TAG)
@@ -778,7 +723,7 @@ def build_env(docker, docker_file, docker_image, no_cache):
     df_obj = _read_docker_files(docker_file.split(','))
     output = docker.build(tag=docker_image, fileobj=df_obj, nocache=no_cache,
                           rm=True, stream=True)
-    _build_progress(docker, output)
+    echo_build_progress(docker, output)
 
 
 @pi.command('test', cls=DockerShellCommand, default_image=ENV_IMAGE_TAG)
