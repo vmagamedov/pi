@@ -2,18 +2,14 @@ import os
 import io
 import sys
 import json
-import socket
-import select
 import hashlib
 import pathlib
-import threading
 import itertools
 import functools
 import collections
 import logging.config
 from datetime import datetime
 from operator import attrgetter
-from contextlib import closing
 
 from requests import ConnectionError
 
@@ -23,10 +19,12 @@ import click
 from click.core import Command, Option
 from click.types import IntParamType, StringParamType
 
+from .run import docker_run
 from .utils import format_size
-from .client import Client, APIError
+from .client import Client
 from .client import echo_download_progress, echo_build_progress
-from .console import raw_stdin, COLORS
+from .threads import start
+from .console import COLORS
 
 
 _CFG_DIR = '~/.pi'
@@ -36,8 +34,6 @@ CFG_DIR = pathlib.Path(os.path.expanduser(_CFG_DIR))
 CUR_DIR = pathlib.Path('.').resolve()
 
 PYTHON_MODULE_REGEX = r'^[a-zA-Z0-9]+\.py$|^[a-zA-Z0-9]+$'
-
-LC_CTYPE = 'en_US.UTF-8'
 
 log = logging.getLogger('pi')
 
@@ -146,23 +142,6 @@ class VolumeType(StringParamType):
 VOLUME = VolumeType()
 
 
-class _Thread(threading.Thread):
-    exit_code = None
-
-    def run(self):
-        try:
-            super(_Thread, self).run()
-        except SystemExit as exc:
-            self.exit_code = exc.code
-            raise
-
-
-def _spawn(func, args=(), kwargs=None):
-    thread = _Thread(target=func, args=args, kwargs=kwargs)
-    thread.start()
-    return thread
-
-
 def docker_client(domain, port):
     return Client('tcp://{0}:{1}'.format(domain, port))
 
@@ -195,53 +174,6 @@ def _read_line(sock):
     else:
         assert len(result) == 1
         return result[0]
-
-
-class expr(object):
-
-    @classmethod
-    def or_(cls, *exprs):
-        return ['anyof'] + list(exprs)
-
-    @classmethod
-    def and_(cls, *exprs):
-        return ['allof'] + list(exprs)
-
-    @classmethod
-    def not_(cls, expr):
-        return ['not', expr]
-
-    @classmethod
-    def ext(cls, extension):
-        return cls.and_(['type', 'f'], ['suffix', extension])
-
-    @classmethod
-    def dirname(cls, name, depth__eq=None, depth__ge=None):
-        if depth__eq is not None:
-            return ['dirname', name, ['depth', 'eq', depth__eq]]
-        elif depth__ge is not None:
-            return ['dirname', name, ['depth', 'ge', depth__ge]]
-        else:
-            return ['dirname', name]
-
-
-def start(func, args, ignore_cbrake=False):
-    exit_event = threading.Event()
-    with raw_stdin(not ignore_cbrake) as tty_fd:
-        kwargs = dict(_exit_event=exit_event, _tty_fd=tty_fd)
-        thread = _spawn(func, args, kwargs)
-        try:
-            while True:
-                # using timeout to avoid main process blocking
-                thread.join(.2)
-                if not thread.is_alive():
-                    break
-        finally:
-            log.debug('exiting...')
-            exit_event.set()
-            thread.join()
-            log.debug('main thread exited')
-        return thread.exit_code
 
 
 def _is_up_or_exit(client):
@@ -281,112 +213,6 @@ class DockerCommand(Command):
         docker = docker_client(*kwargs.pop('docker_host'))
         _is_up_or_exit(docker)
         ctx.invoke(self.callback, docker, **kwargs)
-
-
-def _container_input(tty_fd, sock, exit_event):
-    timeout = 0
-    while True:
-        if exit_event.is_set():
-            break
-        if any(select.select([tty_fd], [], [], timeout)):
-            data = os.read(tty_fd, 32)
-            sock.sendall(data)
-            timeout = 0
-        else:
-            timeout = .2
-    log.debug('input thread exited')
-
-
-def _container_output(sock, exit_event):
-    while True:
-        try:
-            data = sock.recv(4096)
-        except IOError as e:
-            log.debug('connection broken: %s', e)
-            break
-        if not data:
-            break
-        sys.stdout.write(data.decode('utf-8', 'replace'))
-        sys.stdout.flush()
-    exit_event.set()
-    log.debug('output thread exited')
-
-
-def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
-               ports, links, _exit_event, _tty_fd):
-    if _tty_fd is not None:
-        environ = dict(environ or {}, LC_CTYPE=LC_CTYPE)
-
-    container_volumes = []
-    volume_bindings = {}
-    for host_path, dest_path, mode in volumes:
-        container_volumes.append(dest_path)
-        volume_bindings[host_path] = {'bind': dest_path, 'mode': mode}
-
-    container_ports = []
-    port_bindings = {}
-    for ext_ip, ext_port, int_port in ports:
-        container_ports.append(int_port)
-        port_bindings[int_port] = (ext_ip, ext_port)
-
-    link_bindings = [(v, k) for k, v in links.items()]
-
-    try:
-        container = client.create_container(
-            docker_image,
-            command=command,
-            environment=environ,
-            user=user,
-            tty=True,
-            stdin_open=True,
-            ports=container_ports,
-            volumes=container_volumes,
-            working_dir=work_dir or None,
-        )
-    except APIError as e:
-        click.echo(e.explanation)
-        return
-
-    try:
-        try:
-            client.start(container,
-                         binds=volume_bindings,
-                         port_bindings=port_bindings,
-                         links=link_bindings)
-        except APIError as e:
-            click.echo(e.explanation)
-            return
-
-        width, height = click.get_terminal_size()
-        client.resize(container, width, height)
-
-        process_exit = threading.Event()
-
-        attach_params = {'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
-
-        with closing(client.attach_socket_raw(container, attach_params)) as sock:
-            input_thread = _spawn(_container_input, [_tty_fd, sock, _exit_event])
-            output_thread = _spawn(_container_output, [sock, process_exit])
-            while True:
-                if _exit_event.wait(.2):
-                    client.stop(container, timeout=5)
-                    try:
-                        # just to be sure that output thread will exit normally
-                        sock.shutdown(socket.SHUT_RDWR)
-                    except IOError:
-                        pass
-                    break
-                if process_exit.is_set():
-                    _exit_event.set()
-                    break
-            input_thread.join()
-            output_thread.join()
-        exit_code = client.wait(container)
-        if exit_code >= 0:
-            sys.exit(exit_code)
-    finally:
-        client.remove_container(container, v=True, force=True)
-        log.debug('run thread exited')
 
 
 class DockerShellCommand(Command):
