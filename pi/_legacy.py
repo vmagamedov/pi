@@ -1,38 +1,33 @@
 import os
 import io
 import re
-import tty
 import sys
 import json
 import math
-import codecs
 import socket
 import select
-import termios
 import hashlib
 import pathlib
 import threading
 import itertools
 import functools
 import collections
-import http.client
-import urllib.parse
 import logging.config
 from datetime import datetime
 from operator import attrgetter
-from contextlib import closing, contextmanager
+from contextlib import closing
 
 from requests import ConnectionError
 
 import toml
-import yaml
-
-from docker.client import Client as _DockerClient
-from docker.errors import APIError as DockerAPIError
 
 import click
 from click.core import Command, Option
-from click.types import INT, IntParamType, StringParamType, BOOL, STRING
+from click.types import IntParamType, StringParamType
+
+from .tty import raw_stdin
+from .client import Client, APIError
+
 
 _CFG_DIR = '~/.pi'
 
@@ -197,51 +192,8 @@ def _format_size(value):
     return '{} {}'.format(size, unit)
 
 
-@contextmanager
-def _raw_stdin(cbreak=True):
-    if sys.stdin.isatty():
-        fd = sys.stdin.fileno()
-        dev_tty = None
-    else:
-        dev_tty = open('/dev/tty')
-        fd = dev_tty.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        if cbreak:
-            tty.setcbreak(fd)
-        else:
-            tty.setraw(fd)
-        yield fd
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-        if dev_tty is not None:
-            dev_tty.close()
-
-
-class DockerClient(_DockerClient):
-
-    def attach_socket_raw(self, container, params=None):
-        """Returns real writable socket, usable to send stdin"""
-        if params is None:
-            params = {'stdout': 1, 'stderr': 1, 'stream': 1}
-
-        if isinstance(container, dict):
-            container = container['Id']
-
-        url = self._url('/containers/{0}/attach'.format(container))
-        netloc = urllib.parse.urlsplit(self.base_url).netloc
-        conn = http.client.HTTPConnection(netloc)
-        conn.request('POST', url, urllib.parse.urlencode(params), {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        })
-        resp = http.client.HTTPResponse(conn.sock, method='POST')
-        resp.begin()
-        return conn.sock
-
-
 def docker_client(domain, port):
-    return DockerClient('tcp://{0}:{1}'.format(domain, port),
-                        version='1.21')
+    return Client('tcp://{0}:{1}'.format(domain, port))
 
 
 def _lines_writer(output_queue):
@@ -304,7 +256,7 @@ class expr(object):
 
 def start(func, args, ignore_cbrake=False):
     exit_event = threading.Event()
-    with _raw_stdin(not ignore_cbrake) as tty_fd:
+    with raw_stdin(not ignore_cbrake) as tty_fd:
         kwargs = dict(_exit_event=exit_event, _tty_fd=tty_fd)
         thread = _spawn(func, args, kwargs)
         try:
@@ -420,7 +372,7 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
             volumes=container_volumes,
             working_dir=work_dir or None,
         )
-    except DockerAPIError as e:
+    except APIError as e:
         click.echo(e.explanation)
         return
 
@@ -430,7 +382,7 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
                          binds=volume_bindings,
                          port_bindings=port_bindings,
                          links=link_bindings)
-        except DockerAPIError as e:
+        except APIError as e:
             click.echo(e.explanation)
             return
 
