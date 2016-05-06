@@ -24,7 +24,7 @@ from .utils import format_size
 from .client import Client
 from .client import echo_download_progress, echo_build_progress
 from .threads import start
-from .console import COLORS
+from .console import COLORS, configure_logging
 
 
 _CFG_DIR = '~/.pi'
@@ -324,27 +324,7 @@ def pi(ctx, debug):
                                .format(file_path, e))
                     ctx.exit(1)
             break
-    if debug:
-        logging.config.dictConfig({
-            'version': 1,
-            'formatters': {'standard': {
-                'format': '{asctime} {levelname} {name}: {message}',
-                'style': '{',
-                'datefmt': '%H:%M:%S',
-            }},
-            'handlers': {'default': {
-                'class': 'logging.StreamHandler',
-                'level': 'DEBUG',
-                'formatter': 'standard',
-                'stream': 'ext://sys.stderr',
-            }},
-            'loggers': {log.name: {
-                'handlers': ['default'],
-                'level': 'DEBUG',
-            }},
-        })
-    else:
-        log.disabled = True
+    configure_logging(debug)
 
 
 _undefined = object()

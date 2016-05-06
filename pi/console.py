@@ -1,6 +1,7 @@
 import sys
 import tty
 import termios
+import logging.config
 from contextlib import contextmanager
 
 
@@ -34,3 +35,28 @@ def raw_stdin(cbreak=True):
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
         if dev_tty is not None:
             dev_tty.close()
+
+
+def configure_logging(debug):
+    log = logging.getLogger('pi')
+    if debug:
+        logging.config.dictConfig({
+            'version': 1,
+            'formatters': {'standard': {
+                'format': '{asctime} {levelname} {name}: {message}',
+                'style': '{',
+                'datefmt': '%H:%M:%S',
+            }},
+            'handlers': {'default': {
+                'class': 'logging.StreamHandler',
+                'level': 'DEBUG',
+                'formatter': 'standard',
+                'stream': 'ext://sys.stderr',
+            }},
+            'loggers': {log.name: {
+                'handlers': ['default'],
+                'level': 'DEBUG',
+            }},
+        })
+    else:
+        log.disabled = True
