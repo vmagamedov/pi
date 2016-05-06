@@ -2,6 +2,16 @@ import click
 import jinja2
 
 
+class ProxyCommand(click.MultiCommand):
+
+    def parse_args(self, ctx, args):
+        ctx.args = args
+
+    def invoke(self, ctx):
+        if self.callback is not None:
+            ctx.invoke(self.callback, ctx.args)
+
+
 def create_groups(groups_parts):
     groups = []
     mapping = {}
@@ -37,11 +47,15 @@ def parse_attrs(attrs):
     return {'type': type_, 'default': default}
 
 
-def create_command(name, data):
-    args = data.get('args', [])
-    options = data.get('options', [])
-    template = data.get('shell', '')
+def create_proxy_command(name, prefix):
 
+    def cb(args):
+        print('PROXY: {!r} with {!r}'.format(prefix, args))
+
+    return ProxyCommand(name, callback=cb)
+
+
+def create_shell_command(name, args, options, template):
     params = []
     for arg in args:
         (arg_name, attrs), = arg.items()
@@ -57,6 +71,26 @@ def create_command(name, data):
         print('SHELL: {!r}'.format(render_template(template, kw)))
 
     return click.Command(name, params=params, callback=cb)
+
+
+def create_command(name, data):
+    data = data.copy()
+    image = data.pop('image', None)
+    if image is None:
+        raise ValueError('Image not specified ({})'.format(name))
+    if 'shell' in data:
+        args = data.pop('args', [])
+        options = data.pop('options', [])
+        template = data.pop('shell')
+        command = create_shell_command(name, args, options, template)
+    elif 'call' in data:
+        prefix = data.pop('call')
+        command = create_proxy_command(name, prefix)
+    else:
+        raise ValueError('Command "{}" has nothing to call')
+    if data:
+        raise ValueError('Unknown values: {}'.format(list(data.keys())))
+    return command
 
 
 def create_commands(config):
