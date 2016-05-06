@@ -25,22 +25,12 @@ import click
 from click.core import Command, Option
 from click.types import IntParamType, StringParamType
 
-from .tty import raw_stdin
 from .client import Client, APIError
 from .client import echo_download_progress, echo_build_progress
+from .console import raw_stdin, COLORS
 
 
 _CFG_DIR = '~/.pi'
-
-_COLORS = {
-    '_red': '\x1b[38;5;1m',
-    '_green': '\x1b[38;5;2m',
-    '_yellow': '\x1b[38;5;3m',
-    '_magenta': '\x1b[38;5;5m',
-    '_cyan': '\x1b[38;5;6m',
-    '_darkgray': '\x1b[38;5;8m',
-    '_reset': '\x1b[0m',
-}
 
 CFG_DIR = pathlib.Path(os.path.expanduser(_CFG_DIR))
 
@@ -642,21 +632,21 @@ def image_list(docker):
         for tag in tags:
             if tag.current:
                 if tag.missing:
-                    line = '{_red}{0} {_reset}'.format('*', **_COLORS)
+                    line = '{_red}{0} {_reset}'.format('*', **COLORS)
                 else:
-                    line = '{_green}{0} {_reset}'.format('*', **_COLORS)
+                    line = '{_green}{0} {_reset}'.format('*', **COLORS)
             else:
                 line = '  '
             name, version = tag.name.rsplit(':', 1)
             line += name + ':'
-            line += '{_cyan}{0}{_reset}'.format(version, **_COLORS)
+            line += '{_cyan}{0}{_reset}'.format(version, **COLORS)
             if tag.id:
                 line += '{_darkgray} ID:{id} {size} {created}{_reset}'.format(
                     id=tag.id,
                     name=tag.name,
                     size=_format_size(tag.size),
                     created=tag.created.strftime('%Y-%m-%d %H:%M'),
-                    **_COLORS
+                    **COLORS
                 )
             click.echo(line)
 
