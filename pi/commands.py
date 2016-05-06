@@ -47,15 +47,22 @@ def parse_attrs(attrs):
     return {'type': type_, 'default': default}
 
 
-def create_proxy_command(name, prefix):
+def get_short_help(help):
+    lines = help.splitlines()
+    return lines[0]
+
+
+def create_proxy_command(name, prefix, help):
 
     def cb(args):
         print('PROXY: {!r} with {!r}'.format(prefix, args))
 
-    return ProxyCommand(name, callback=cb)
+    short_help = get_short_help(help) if help else None
+    return ProxyCommand(name, callback=cb,
+                        help=help, short_help=short_help)
 
 
-def create_shell_command(name, args, options, template):
+def create_shell_command(name, args, options, template, help):
     params = []
     for arg in args:
         (arg_name, attrs), = arg.items()
@@ -70,22 +77,25 @@ def create_shell_command(name, args, options, template):
     def cb(**kw):
         print('SHELL: {!r}'.format(render_template(template, kw)))
 
-    return click.Command(name, params=params, callback=cb)
+    short_help = get_short_help(help) if help else None
+    return click.Command(name, params=params, callback=cb,
+                         help=help, short_help=short_help)
 
 
 def create_command(name, data):
     data = data.copy()
     image = data.pop('image', None)
+    help = data.pop('help', None)
     if image is None:
         raise ValueError('Image not specified ({})'.format(name))
     if 'shell' in data:
         args = data.pop('args', [])
         options = data.pop('options', [])
         template = data.pop('shell')
-        command = create_shell_command(name, args, options, template)
+        command = create_shell_command(name, args, options, template, help)
     elif 'call' in data:
         prefix = data.pop('call')
-        command = create_proxy_command(name, prefix)
+        command = create_proxy_command(name, prefix, help)
     else:
         raise ValueError('Command "{}" has nothing to call')
     if data:
