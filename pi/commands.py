@@ -1,4 +1,5 @@
 import click
+import jinja2
 
 
 def create_groups(groups_parts):
@@ -39,6 +40,7 @@ def parse_attrs(attrs):
 def create_command(name, data):
     args = data.get('args', [])
     options = data.get('options', [])
+    template = data.get('shell', '')
 
     params = []
     for arg in args:
@@ -52,7 +54,7 @@ def create_command(name, data):
         params.append(click.Option([opt_decl], **opt_kwargs))
 
     def cb(**kw):
-        print(kw)
+        print('SHELL: {!r}'.format(render_template(template, kw)))
 
     return click.Command(name, params=params, callback=cb)
 
@@ -83,3 +85,8 @@ def create_commands(config):
             commands.append(command)
 
     return groups + commands
+
+
+def render_template(template, params):
+    t = jinja2.Template(template)
+    return t.render(params)
