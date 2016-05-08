@@ -1,12 +1,15 @@
+import os
 import sys
 import socket
 import logging
 import threading
+from asyncio import Queue
 from contextlib import closing
 
 import click
 
 from .client import APIError
+from .actors import receive, send, MessageType
 from .threads import spawn_input_thread, spawn_output_thread
 
 
@@ -90,3 +93,31 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
     finally:
         client.remove_container(container, v=True, force=True)
         log.debug('run thread exited')
+
+
+INPUT = MessageType('INPUT')
+
+
+def printer(self):
+    while True:
+        type_, value = yield from receive(self)
+        if type_ is INPUT:
+            sys.stdout.write(value)
+            sys.stdout.flush()
+        else:
+            raise TypeError(type_)
+
+
+def input(self, fd, dst):
+    q = Queue()
+
+    def cb():
+        q.put_nowait(os.read(fd, 32).decode('utf-8'))
+
+    self.loop.add_reader(fd, cb)
+    try:
+        while True:
+            data = yield from q.get()
+            yield from send(dst, INPUT, data)
+    finally:
+        self.loop.remove_reader(fd)
