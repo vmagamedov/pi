@@ -89,3 +89,7 @@ def echo_build_progress(client, output):
             log.exception('Failed to delete current container')
         finally:
             raise original_exc
+
+
+def get_client():
+    return Client('http+unix:///var/tmp/docker.sock')
