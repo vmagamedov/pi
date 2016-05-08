@@ -6,7 +6,7 @@ import http.client
 import urllib.parse
 
 import docker.errors
-from docker import AutoVersionClient
+from docker import Client as _Client
 
 
 APIError = docker.errors.APIError
@@ -14,7 +14,7 @@ APIError = docker.errors.APIError
 log = logging.getLogger(__name__)
 
 
-class Client(AutoVersionClient):
+class Client(_Client):
 
     def attach_socket_raw(self, container, params=None):
         """Returns real writable socket, usable to send stdin"""
