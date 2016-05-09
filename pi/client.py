@@ -2,37 +2,13 @@ import re
 import sys
 import json
 import logging
-import http.client
-import urllib.parse
 
 import docker.errors
-from docker import Client as _Client
 
 
 APIError = docker.errors.APIError
 
 log = logging.getLogger(__name__)
-
-
-class Client(_Client):
-
-    def attach_socket_raw(self, container, params=None):
-        """Returns real writable socket, usable to send stdin"""
-        if params is None:
-            params = {'stdout': 1, 'stderr': 1, 'stream': 1}
-
-        if isinstance(container, dict):
-            container = container['Id']
-
-        url = self._url('/containers/{0}/attach'.format(container))
-        netloc = urllib.parse.urlsplit(self.base_url).netloc
-        conn = http.client.HTTPConnection(netloc)
-        conn.request('POST', url, urllib.parse.urlencode(params), {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        })
-        resp = http.client.HTTPResponse(conn.sock, method='POST')
-        resp.begin()
-        return conn.sock
 
 
 def echo_download_progress(output):
@@ -92,4 +68,4 @@ def echo_build_progress(client, output):
 
 
 def get_client():
-    return Client('http+unix:///var/tmp/docker.sock')
+    return docker.Client('http+unix:///var/tmp/docker.sock')

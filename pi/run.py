@@ -1,16 +1,12 @@
 import os
 import sys
-import socket
 import logging
-import threading
 from asyncio import Queue
-from contextlib import closing
 
 import click
 
 from .client import APIError
 from .actors import receive, send, MessageType
-from .threads import spawn_input_thread, spawn_output_thread
 
 
 log = logging.getLogger(__name__)
@@ -65,28 +61,10 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
 
         width, height = click.get_terminal_size()
         client.resize(container, width, height)
-
-        process_exit = threading.Event()
-
-        attach_params = {'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
-
-        with closing(client.attach_socket_raw(container, attach_params)) as sock:
-            input_thread = spawn_input_thread(_tty_fd, sock, _exit_event)
-            output_thread = spawn_output_thread(sock, process_exit)
-            while True:
-                if _exit_event.wait(.2):
-                    client.stop(container, timeout=5)
-                    try:
-                        # just to be sure that output thread will exit normally
-                        sock.shutdown(socket.SHUT_RDWR)
-                    except IOError:
-                        pass
-                    break
-                if process_exit.is_set():
-                    _exit_event.set()
-                    break
-            input_thread.join()
-            output_thread.join()
+        while True:
+            if _exit_event.wait(.2):
+                client.stop(container, timeout=5)
+                break
         exit_code = client.wait(container)
         if exit_code >= 0:
             sys.exit(exit_code)
@@ -96,12 +74,13 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
 
 
 INPUT = MessageType('INPUT')
+OUTPUT = MessageType('OUTPUT')
 
 
 def printer(self):
     while True:
         type_, value = yield from receive(self)
-        if type_ is INPUT:
+        if type_ in {INPUT, OUTPUT}:
             sys.stdout.write(value)
             sys.stdout.flush()
         else:
@@ -112,12 +91,20 @@ def input(self, fd, dst):
     q = Queue()
 
     def cb():
-        q.put_nowait(os.read(fd, 32).decode('utf-8'))
+        q.put_nowait(os.read(fd, 32))
 
     self.loop.add_reader(fd, cb)
     try:
         while True:
             data = yield from q.get()
-            yield from send(dst, INPUT, data)
+            yield from send(dst, INPUT, data.decode('utf-8'))
     finally:
         self.loop.remove_reader(fd)
+
+
+def output(self, sock, dst):
+    while True:
+        data = yield from self.loop.sock_recv(sock, 4096)
+        if not data:
+            break
+        yield from send(dst, OUTPUT, data.decode('utf-8'))
