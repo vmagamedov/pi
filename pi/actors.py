@@ -1,4 +1,5 @@
-from asyncio import Queue, coroutine, wait_for, CancelledError
+from asyncio import Queue, coroutine, wait, wait_for, CancelledError
+from functools import partial
 
 
 class MessageType:
@@ -16,6 +17,15 @@ class Addr:
     def __init__(self, *, loop):
         self.loop = loop
         self.mailbox = Queue()
+
+    def spawn(self, fn, *args, **kwargs):
+        return spawn(fn, list(args), kwargs, loop=self.loop)
+
+    def exec(self, fn, *args, **kwargs):
+        return self.loop.run_in_executor(None, partial(fn, *args, **kwargs))
+
+    def wait(self, processes):
+        return wait([a.task for a in processes], loop=self.loop)
 
 
 def spawn(func, args=None, kwargs=None, *, loop):
@@ -46,3 +56,15 @@ def send(addr, type_, value):
 
 def receive(addr):
     return (yield from addr.mailbox.get())
+
+
+def terminator(processes, *, loop):
+    def coro(self):
+        for p in processes:
+            yield from terminate(p)
+        loop.call_soon(loop.stop)
+
+    def callback():
+        print('Terminating...')
+        spawn(coro, loop=loop)
+    return callback

@@ -1,13 +1,13 @@
 import os
 import sys
+import socket
 import logging
-from asyncio import Queue
+from asyncio import Queue, CancelledError
 
 import click
 
 from .client import APIError
-from .actors import receive, send, MessageType
-
+from .actors import receive, send, MessageType, terminate
 
 log = logging.getLogger(__name__)
 
@@ -73,18 +73,7 @@ def docker_run(client, docker_image, command, environ, user, work_dir, volumes,
         log.debug('run thread exited')
 
 
-INPUT = MessageType('INPUT')
-OUTPUT = MessageType('OUTPUT')
-
-
-def printer(self):
-    while True:
-        type_, value = yield from receive(self)
-        if type_ in {INPUT, OUTPUT}:
-            sys.stdout.write(value)
-            sys.stdout.flush()
-        else:
-            raise TypeError(type_)
+BYTES = MessageType('BYTES')
 
 
 def input(self, fd, dst):
@@ -97,14 +86,78 @@ def input(self, fd, dst):
     try:
         while True:
             data = yield from q.get()
-            yield from send(dst, INPUT, data.decode('utf-8'))
+            yield from send(dst, BYTES, data)
     finally:
         self.loop.remove_reader(fd)
 
 
-def output(self, sock, dst):
+def output(self):
+    while True:
+        type_, value = yield from receive(self)
+        if type_ is BYTES:
+            sys.stdout.write(value.decode('utf-8', 'replace'))
+            sys.stdout.flush()
+        else:
+            raise TypeError(type_)
+
+
+def socket_reader(self, sock, dst):
     while True:
         data = yield from self.loop.sock_recv(sock, 4096)
         if not data:
             break
-        yield from send(dst, OUTPUT, data.decode('utf-8'))
+        yield from send(dst, BYTES, data)
+
+
+def socket_writer(self, sock):
+    while True:
+        type_, value = yield from receive(self)
+        if type_ is BYTES:
+            yield from self.loop.sock_sendall(sock, value)
+        else:
+            raise TypeError(type_)
+
+
+def run(self, client, input_fd):
+    try:
+        c = yield from self.exec(client.create_container,
+                                 image='ubuntu:trusty',
+                                 command=['/bin/ping', '-c', '5', '8.8.8.8'],
+                                 tty=True,
+                                 stdin_open=True)
+    except APIError as e:
+        click.echo(e.explanation)
+        return
+    try:
+        try:
+            yield from self.exec(client.start, c)
+        except APIError as e:
+            click.echo(e.explanation)
+            return
+
+        width, height = click.get_terminal_size()
+        yield from self.exec(client.resize, c, width, height)
+
+        params = {'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
+        with (yield from self.exec(client.attach_socket, c, params)) as sock_io:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
+                                 fileno=sock_io.fileno())
+            sock.setblocking(False)
+
+            socket_writer_proc = self.spawn(socket_writer, sock)
+            input_proc = self.spawn(input, input_fd, socket_writer_proc)
+
+            output_proc = self.spawn(output)
+            socket_reader_proc = self.spawn(socket_reader, sock, output_proc)
+
+            try:
+                yield from self.wait([socket_reader_proc])
+            except CancelledError:
+                yield from terminate(socket_reader_proc)
+
+            yield from terminate(output_proc)
+            yield from terminate(input_proc)
+            yield from terminate(socket_writer_proc)
+
+    finally:
+        yield from self.exec(client.remove_container, c, v=True, force=True)
