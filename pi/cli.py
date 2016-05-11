@@ -13,20 +13,12 @@ class Context(DockerMixin):
 @click.command()
 @click.pass_context
 def ping(ctx):
-    import signal
-    import asyncio
     from .run import run
-    from .actors import spawn, Terminator
+    from .actors import init
     from .console import raw_stdin
 
-    loop = asyncio.get_event_loop()
     with raw_stdin() as fd:
-        run_proc = spawn(run, [ctx.obj.client, fd], loop=loop)
-
-        terminator = Terminator([signal.SIGINT], [run_proc], loop=loop)
-        terminator.install()
-
-        loop.run_forever()
+        init(run, ctx.obj.client, fd)
 
 
 def build_cli():
