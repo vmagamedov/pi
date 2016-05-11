@@ -11,7 +11,7 @@ class MessageType:
         return '<MSG[{}]>'.format(self._name)
 
 
-class Addr:
+class Process:
     task = None
 
     def __init__(self, *, loop):
@@ -29,33 +29,33 @@ class Addr:
 
 
 def spawn(func, args=None, kwargs=None, *, loop):
-    addr = Addr(loop=loop)
+    process = Process(loop=loop)
 
     args = args[:] if args is not None else []
-    args.insert(0, addr)
+    args.insert(0, process)
 
     kwargs = kwargs.copy() if kwargs is not None else {}
 
     task = loop.create_task(func(*args, **kwargs))
-    addr.task = task
-    return addr
+    process.task = task
+    return process
 
 
 @coroutine
-def terminate(addr):
-    addr.task.cancel()
+def terminate(process):
+    process.task.cancel()
     try:
-        yield from wait_for(addr.task, 1, loop=addr.loop)
+        yield from wait_for(process.task, 1, loop=process.loop)
     except CancelledError:
         pass
 
 
-def send(addr, type_, value):
-    yield from addr.mailbox.put((type_, value))
+def send(process, type_, value):
+    yield from process.mailbox.put((type_, value))
 
 
-def receive(addr):
-    return (yield from addr.mailbox.get())
+def receive(process):
+    return (yield from process.mailbox.get())
 
 
 class Terminator:
