@@ -1,4 +1,4 @@
-from asyncio import Queue, coroutine, wait, wait_for, CancelledError
+from asyncio import Queue, coroutine, wait, wait_for, CancelledError, Event
 from functools import partial
 
 
@@ -58,13 +58,32 @@ def receive(addr):
     return (yield from addr.mailbox.get())
 
 
-def terminator(processes, *, loop):
-    def coro(self):
-        for p in processes:
-            yield from terminate(p)
-        loop.call_soon(loop.stop)
+class Terminator:
 
-    def callback():
-        print('Terminating...')
-        spawn(coro, loop=loop)
-    return callback
+    def __init__(self, signals, processes, *, loop):
+        self._signals = signals
+        self._processes = processes
+        self._loop = loop
+        self._exit_event = Event()
+
+    def install(self):
+        for signal in self._signals:
+            self._loop.add_signal_handler(signal.SIGINT, self._signal_handler)
+        self._loop.create_task(self._watcher())
+
+    def _exit(self):
+        try:
+            for p in self._processes:
+                yield from terminate(p)
+        finally:
+            self._loop.call_soon(self._loop.stop)
+
+    def _signal_handler(self):
+        self._exit_event.set()
+        self._loop.create_task(self._exit())
+
+    def _watcher(self):
+        yield from wait([p.task for p in self._processes],
+                        loop=self._loop)
+        if not self._exit_event.is_set():
+            self._loop.call_soon(self._loop.stop)

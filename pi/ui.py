@@ -6,7 +6,7 @@ import click
 from .run import run
 from .utils import cached_property
 from .client import get_client
-from .actors import spawn, terminator
+from .actors import spawn, Terminator
 from .console import raw_stdin
 
 
@@ -29,10 +29,8 @@ def coro(ctx):
     loop = asyncio.get_event_loop()
     with raw_stdin() as fd:
         run_proc = spawn(run, [ctx.obj.client, fd], loop=loop)
-        loop.add_signal_handler(signal.SIGINT,
-                                terminator([run_proc], loop=loop))
 
-        # FIXME: handle Ctrl+C and normal exit properly
-        # run_proc.task.add_done_callback(lambda f: loop.stop())
+        terminator = Terminator([signal.SIGINT], [run_proc], loop=loop)
+        terminator.install()
+
         loop.run_forever()
-        # loop.run_until_complete(run_proc.task)
