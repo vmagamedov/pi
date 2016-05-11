@@ -67,8 +67,8 @@ class Terminator:
         self._exit_event = Event()
 
     def install(self):
-        for signal in self._signals:
-            self._loop.add_signal_handler(signal.SIGINT, self._signal_handler)
+        for sig_num in self._signals:
+            self._loop.add_signal_handler(sig_num, self._signal_handler)
         self._loop.create_task(self._watcher())
 
     def _exit(self):

@@ -52,6 +52,11 @@ def get_short_help(help):
     return lines[0]
 
 
+def render_template(template, params):
+    t = jinja2.Template(template)
+    return t.render(params)
+
+
 def create_proxy_command(name, prefix, help):
 
     def cb(args):
@@ -103,7 +108,7 @@ def create_command(name, data):
     return command
 
 
-def create_commands(config):
+def build_commands_cli(config):
     groups_set = set()
     commands_map = dict()
 
@@ -128,9 +133,9 @@ def create_commands(config):
         else:
             commands.append(command)
 
-    return groups + commands
-
-
-def render_template(template, params):
-    t = jinja2.Template(template)
-    return t.render(params)
+    cli = click.Group()
+    for group in groups:
+        cli.add_command(group)
+    for command in commands:
+        cli.add_command(command)
+    return cli
