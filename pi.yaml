@@ -1,0 +1,10 @@
+commands:
+  echo:
+    image: ubuntu:xenial
+    arguments:
+      - name: default=World
+    shell: echo "Hello {{name}}!!!"
+
+  ping:
+    image: ubuntu:xenial
+    call: ping

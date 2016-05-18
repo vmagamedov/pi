@@ -1,5 +1,11 @@
+import shlex
+
 import click
 import jinja2
+
+from .run import run
+from .actors import init
+from .console import raw_stdin
 
 
 class ProxyCommand(click.MultiCommand):
@@ -57,10 +63,20 @@ def render_template(template, params):
     return t.render(params)
 
 
-def create_proxy_command(name, prefix, help):
+def execute(client, command):
+    with raw_stdin() as fd:
+        init(run, client, fd, command)
+    return 0  # TODO: return real exit code
 
-    def cb(args):
-        print('PROXY: {!r} with {!r}'.format(prefix, args))
+
+def create_proxy_command(name, prefix, help):
+    if isinstance(prefix, str):
+        prefix = shlex.split(prefix)
+
+    @click.pass_context
+    def cb(ctx, args):
+        exit_code = execute(ctx.obj.client, prefix + args)
+        ctx.exit(exit_code)
 
     short_help = get_short_help(help) if help else None
     return ProxyCommand(name, callback=cb,
@@ -79,8 +95,12 @@ def create_shell_command(name, args, options, template, help):
         opt_decl = ('-' if len(opt_name) == 1 else '--') + opt_name
         params.append(click.Option([opt_decl], **opt_kwargs))
 
-    def cb(**kw):
-        print('SHELL: {!r}'.format(render_template(template, kw)))
+    @click.pass_context
+    def cb(ctx, **kw):
+        code = render_template(template, kw)
+        command = ['/bin/bash', '-c', code]
+        exit_code = execute(ctx.obj.client, command)
+        ctx.exit(exit_code)
 
     short_help = get_short_help(help) if help else None
     return click.Command(name, params=params, callback=cb,
@@ -94,12 +114,14 @@ def create_command(name, data):
     if image is None:
         raise ValueError('Image not specified ({})'.format(name))
     if 'shell' in data:
-        args = data.pop('args', [])
+        args = data.pop('arguments', [])
         options = data.pop('options', [])
         template = data.pop('shell')
         command = create_shell_command(name, args, options, template, help)
     elif 'call' in data:
         prefix = data.pop('call')
+        if not isinstance(prefix, (str, list)):
+            raise TypeError('"call" value should be a list or string')
         command = create_proxy_command(name, prefix, help)
     else:
         raise ValueError('Command "{}" has nothing to call')

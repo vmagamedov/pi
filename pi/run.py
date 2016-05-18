@@ -118,11 +118,11 @@ def socket_writer(self, sock):
             raise TypeError(type_)
 
 
-def run(self, client, input_fd):
+def run(self, client, input_fd, command):
     try:
         c = yield from self.exec(client.create_container,
                                  image='ubuntu:trusty',
-                                 command=['/bin/ping', '-c', '5', '8.8.8.8'],
+                                 command=command,
                                  tty=True,
                                  stdin_open=True)
     except APIError as e:
@@ -138,7 +138,7 @@ def run(self, client, input_fd):
         width, height = click.get_terminal_size()
         yield from self.exec(client.resize, c, width, height)
 
-        params = {'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
+        params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
         with (yield from self.exec(client.attach_socket, c, params)) as sock_io:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
                                  fileno=sock_io.fileno())
