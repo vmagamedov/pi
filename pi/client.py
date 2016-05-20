@@ -1,3 +1,4 @@
+import os
 import re
 import sys
 import json
@@ -9,6 +10,8 @@ import docker.errors
 APIError = docker.errors.APIError
 
 log = logging.getLogger(__name__)
+
+DEFAULT_URL = 'http+unix:///var/tmp/docker.sock'
 
 
 def echo_download_progress(output):
@@ -68,4 +71,5 @@ def echo_build_progress(client, output):
 
 
 def get_client():
-    return docker.Client('http+unix:///var/tmp/docker.sock')
+    url = os.environ.get('DOCKER_HOST', DEFAULT_URL)
+    return docker.Client(url)
