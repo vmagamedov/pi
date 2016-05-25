@@ -8,3 +8,9 @@ class DockerMixin:
         from .client import get_client
 
         return get_client()
+
+
+class ImagesMixin:
+
+    def require_image(self, image):
+        return 'ubuntu:trusty'

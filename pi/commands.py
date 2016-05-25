@@ -63,19 +63,20 @@ def render_template(template, params):
     return t.render(params)
 
 
-def execute(client, command):
+def execute(client, image, command):
     with raw_stdin() as fd:
-        init(run, client, fd, command)
+        init(run, client, fd, image, command)
     return 0  # TODO: return real exit code
 
 
-def create_proxy_command(name, prefix, help):
+def create_proxy_command(name, image, prefix, help):
     if isinstance(prefix, str):
         prefix = shlex.split(prefix)
 
     @click.pass_context
     def cb(ctx, args):
-        exit_code = execute(ctx.obj.client, prefix + args)
+        docker_image = ctx.obj.require_image(image)
+        exit_code = execute(ctx.obj.client, docker_image, prefix + args)
         ctx.exit(exit_code)
 
     short_help = get_short_help(help) if help else None
@@ -83,7 +84,7 @@ def create_proxy_command(name, prefix, help):
                         help=help, short_help=short_help)
 
 
-def create_shell_command(name, args, options, template, help):
+def create_shell_command(name, image, args, options, template, help):
     params = []
     for arg in args:
         (arg_name, attrs), = arg.items()
@@ -97,9 +98,10 @@ def create_shell_command(name, args, options, template, help):
 
     @click.pass_context
     def cb(ctx, **kw):
+        docker_image = ctx.obj.require_image(image)
         code = render_template(template, kw)
         command = ['/bin/bash', '-c', code]
-        exit_code = execute(ctx.obj.client, command)
+        exit_code = execute(ctx.obj.client, docker_image, command)
         ctx.exit(exit_code)
 
     short_help = get_short_help(help) if help else None
@@ -112,19 +114,20 @@ def create_command(name, data):
     image = data.pop('image', None)
     help = data.pop('help', None)
     if image is None:
-        raise ValueError('Image not specified ({})'.format(name))
+        raise ValueError('Image is not specified ({})'.format(name))
     if 'shell' in data:
         args = data.pop('arguments', [])
         options = data.pop('options', [])
         template = data.pop('shell')
-        command = create_shell_command(name, args, options, template, help)
+        command = create_shell_command(name, image, args, options,
+                                       template, help)
     elif 'call' in data:
         prefix = data.pop('call')
         if not isinstance(prefix, (str, list)):
             raise TypeError('"call" value should be a list or string')
-        command = create_proxy_command(name, prefix, help)
+        command = create_proxy_command(name, image, prefix, help)
     else:
-        raise ValueError('Command "{}" has nothing to call')
+        raise ValueError('Command "{}" has nothing to call'.format(name))
     if data:
         raise ValueError('Unknown values: {}'.format(list(data.keys())))
     return command

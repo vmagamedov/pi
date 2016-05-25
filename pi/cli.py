@@ -2,11 +2,11 @@ import click
 
 from .config import read_config
 from .images import build_images_cli
-from .context import DockerMixin
+from .context import DockerMixin, ImagesMixin
 from .commands import build_commands_cli
 
 
-class Context(DockerMixin):
+class Context(DockerMixin, ImagesMixin):
     pass
 
 

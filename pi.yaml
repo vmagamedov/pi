@@ -1,10 +1,23 @@
 commands:
   echo:
-    image: ubuntu:xenial
+    image: !docker ubuntu:xenial
     arguments:
       - name: default=World
     shell: echo "Hello {{name}}!!!"
 
   ping:
-    image: ubuntu:xenial
+    image: !docker ubuntu:xenial
     call: ping
+
+images:
+  base1:
+    from: !docker ubuntu:xenial
+    ansible-tasks: []
+
+  base2:
+    from: !docker ubuntu:xenial
+    ansible-playbook: playbook.yaml
+
+  app.env:
+    from: base1
+    ansible-tasks: []

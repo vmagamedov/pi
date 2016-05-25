@@ -118,10 +118,10 @@ def socket_writer(self, sock):
             raise TypeError(type_)
 
 
-def run(self, client, input_fd, command):
+def run(self, client, input_fd, image, command):
     try:
         c = yield from self.exec(client.create_container,
-                                 image='ubuntu:trusty',
+                                 image=image,
                                  command=command,
                                  tty=True,
                                  stdin_open=True)
