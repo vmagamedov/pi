@@ -1,13 +1,9 @@
 import click
 
 from .config import read_config
-from .images import build_images_cli
-from .context import DockerMixin, ImagesMixin
+from .images import build_images_cli, construct_layers
+from .context import Context
 from .commands import build_commands_cli
-
-
-class Context(DockerMixin, ImagesMixin):
-    pass
 
 
 def build_cli():
@@ -15,5 +11,7 @@ def build_cli():
     images_cli = build_images_cli(config)
     commands_cli = build_commands_cli(config)
 
+    layers = construct_layers(config)
+
     cli = click.CommandCollection(sources=[images_cli, commands_cli])
-    cli(obj=Context())
+    cli(obj=Context(layers))

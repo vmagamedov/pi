@@ -1,5 +1,7 @@
 import click
 
+from .layers import DockerfileLayer
+
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
@@ -74,3 +76,7 @@ def build_images_cli(config):
 
     cli.add_command(image_group)
     return cli
+
+
+def construct_layers(config):
+    return [DockerfileLayer('env', 'reg.local/env', 'Dockerfile.env')]
