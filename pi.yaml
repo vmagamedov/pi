@@ -6,10 +6,13 @@ commands:
     shell: echo "Hello {{name}}!!!"
 
   ping:
-    image: !docker ubuntu:xenial
+    image: !docker ubuntu:trusty
     call: ping
 
 images:
+  env:
+    docker-file: Dockerfile.env
+
   base1:
     from: !docker ubuntu:xenial
     ansible-tasks: []

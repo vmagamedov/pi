@@ -1,18 +1,16 @@
 import codecs
 import os.path
-import collections
 
 import yaml.loader
 
-
-docker = collections.namedtuple('docker', 'image')
+from .layers import Image
 
 
 class Loader(yaml.loader.SafeLoader):
 
     def construct_docker(self, node):
-        value = self.construct_scalar(node)
-        return docker(value)
+        name = self.construct_scalar(node)
+        return Image(name)
 
 
 Loader.add_constructor('!docker', Loader.construct_docker)

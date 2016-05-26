@@ -1,4 +1,5 @@
 from .utils import cached_property
+from .config import Image
 
 
 class Context:
@@ -13,4 +14,8 @@ class Context:
         return get_client()
 
     def require_image(self, image):
-        return 'ubuntu:trusty'
+        if not isinstance(image, Image):
+            layer = self.layers[image]
+            image = layer.image()
+        # check and autoload image
+        return image.name

@@ -1,14 +1,18 @@
 import hashlib
 import binascii
+import collections
+
+
+Image = collections.namedtuple('Image', 'name')
 
 
 class Layer:
     _hash = None
 
-    def __init__(self, name, docker_image, *, parent=None):
+    def __init__(self, name, repo, *, parent=None):
         self.name = name
-        self.docker_image = docker_image
-        self.parent = parent
+        self._repo = repo
+        self._parent = parent
 
     def __hashable__(self):
         raise NotImplementedError
@@ -16,8 +20,8 @@ class Layer:
     def hash(self):
         if self._hash is None:
             h = hashlib.sha1()
-            if self.parent is not None:
-                h.update(self.parent.hash())
+            if self._parent is not None:
+                h.update(self._parent.hash())
             for chunk in self.__hashable__():
                 h.update(chunk)
             self._hash = h.digest()
@@ -26,11 +30,14 @@ class Layer:
     def version(self):
         return binascii.hexlify(self.hash()).decode('ascii')[:12]
 
+    def image(self):
+        return Image('{}:{}'.format(self._repo, self.version()))
+
 
 class DockerfileLayer(Layer):
 
-    def __init__(self, name, docker_image, docker_file, *, parent=None):
-        super().__init__(name, docker_image, parent=parent)
+    def __init__(self, name, repo, docker_file, *, parent=None):
+        super().__init__(name, repo, parent=parent)
         self.file_name = docker_file
 
     def __hashable__(self):
