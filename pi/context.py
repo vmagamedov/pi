@@ -18,4 +18,4 @@ class Context:
             layer = self.layers[image]
             image = layer.image()
         # check and autoload image
-        return image.name
+        return image

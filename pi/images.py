@@ -1,7 +1,6 @@
 import click
 
-from .layers import DockerfileLayer
-
+from .layers import DockerfileLayer, AnsibleTasksLayer, Image
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
@@ -34,6 +33,7 @@ def _build_with_ansible_tasks_cmd(name, from_, ansible_tasks):
 
 def create_build_command(name, data):
     data = data.copy()
+    data.pop('repository')
 
     if 'from' in data:
         from_ = data.pop('from')
@@ -78,5 +78,65 @@ def build_images_cli(config):
     return cli
 
 
+def construct_layer(name, data, parent):
+    data = data.copy()
+    repository = data.pop('repository')
+    if 'docker-file' in data:
+        dockerfile = data.pop('docker-file')
+        layer = DockerfileLayer(name, repository, dockerfile)
+    elif 'ansible-tasks' in data:
+        data.pop('from', None)
+        ansible_tasks = data.pop('ansible-tasks')
+        layer = AnsibleTasksLayer(name, repository, ansible_tasks,
+                                  parent=parent)
+    else:
+        raise ValueError('Image type is undefined: {}'.format(name))
+    if data:
+        raise ValueError('Unknown values: {}'.format(list(data.keys())))
+    return layer
+
+
+def resolve_deps(deps):
+    while True:
+        resolved = set()
+        for name, parent_name in deps.items():
+            if parent_name not in deps:
+                resolved.add(name)
+        if not resolved:
+            raise TypeError('Images hierarchy build error, '
+                            'circular dependency found in these images: {}'
+                            .format(', '.join(sorted(deps.keys()))))
+        for name in resolved:
+            yield name, deps[name]
+        deps = {k: v for k, v in deps.items() if k not in resolved}
+        if not deps:
+            return
+
+
 def construct_layers(config):
-    return [DockerfileLayer('env', 'reg.local/env', 'Dockerfile.env')]
+    deps = {}
+    layers = {}
+    data_by_name = {}
+
+    for name, data in config.get('images', {}).items():
+        if 'from' in data:
+            from_ = data['from']
+            if not isinstance(from_, Image):
+                deps[name] = from_
+                data_by_name[name] = data
+                continue
+        layers[name] = construct_layer(name, data, None)
+
+    # check missing parents
+    missing = {name for name, parent_name in deps.items()
+               if parent_name not in deps and parent_name not in layers}
+    if missing:
+        raise TypeError('These images has missing parent images: {}'
+                        .format(', '.join(sorted(missing))))
+
+    for name, parent_name in resolve_deps(deps):
+        data = data_by_name[name]
+        parent = layers[parent_name]
+        layers[name] = construct_layer(name, data, parent)
+
+    return list(layers.values())

@@ -121,7 +121,7 @@ def socket_writer(self, sock):
 def run(self, client, input_fd, image, command):
     try:
         c = yield from self.exec(client.create_container,
-                                 image=image,
+                                 image=image.name,
                                  command=command,
                                  tty=True,
                                  stdin_open=True)

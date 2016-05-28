@@ -11,16 +11,10 @@ commands:
 
 images:
   env:
+    repository: reg.local/env
     docker-file: Dockerfile.env
 
-  base1:
-    from: !docker ubuntu:xenial
-    ansible-tasks: []
-
-  base2:
-    from: !docker ubuntu:xenial
-    ansible-playbook: playbook.yaml
-
   app.env:
-    from: base1
+    repository: reg.local/app.env
+    from: env
     ansible-tasks: []

@@ -9,9 +9,9 @@ Image = collections.namedtuple('Image', 'name')
 class Layer:
     _hash = None
 
-    def __init__(self, name, repo, *, parent=None):
+    def __init__(self, name, repository, *, parent=None):
         self.name = name
-        self._repo = repo
+        self._repository = repository
         self._parent = parent
 
     def __hashable__(self):
@@ -31,15 +31,25 @@ class Layer:
         return binascii.hexlify(self.hash()).decode('ascii')[:12]
 
     def image(self):
-        return Image('{}:{}'.format(self._repo, self.version()))
+        return Image('{}:{}'.format(self._repository, self.version()))
 
 
 class DockerfileLayer(Layer):
 
-    def __init__(self, name, repo, docker_file, *, parent=None):
-        super().__init__(name, repo, parent=parent)
-        self.file_name = docker_file
+    def __init__(self, name, repository, file_name, *, parent=None):
+        super().__init__(name, repository, parent=parent)
+        self.file_name = file_name
 
     def __hashable__(self):
         with open(self.file_name, 'rb') as f:
             return [f.read()]
+
+
+class AnsibleTasksLayer(Layer):
+
+    def __init__(self, name, repository, ansible_tasks, *, parent=None):
+        super().__init__(name, repository, parent=parent)
+        self.ansible_tasks = ansible_tasks
+
+    def __hashable__(self):
+        return [repr(self.ansible_tasks).encode('utf-8')]
