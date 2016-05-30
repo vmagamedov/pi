@@ -1,6 +1,6 @@
 commands:
   echo:
-    image: !docker ubuntu:xenial
+    image: env
     arguments:
       - name: default=World
     shell: echo "Hello {{name}}!!!"

@@ -1,5 +1,5 @@
 from .utils import cached_property
-from .config import Image
+from .layers import Image
 
 
 class Context:
@@ -19,3 +19,11 @@ class Context:
             image = layer.image()
         # check and autoload image
         return image
+
+    def layers_path(self, name):
+        path = []
+        parent = self.layers[name]
+        while parent is not None:
+            path.append(parent)
+            parent = path[-1].parent
+        return tuple(reversed(path))

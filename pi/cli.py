@@ -8,10 +8,10 @@ from .commands import build_commands_cli
 
 def build_cli():
     config = read_config()
-    images_cli = build_images_cli(config)
     commands_cli = build_commands_cli(config)
 
     layers = construct_layers(config)
+    images_cli = build_images_cli(layers)
 
     cli = click.CommandCollection(sources=[images_cli, commands_cli])
     cli(obj=Context(layers))

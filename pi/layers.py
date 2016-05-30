@@ -11,8 +11,8 @@ class Layer:
 
     def __init__(self, name, repository, *, parent=None):
         self.name = name
-        self._repository = repository
-        self._parent = parent
+        self.repository = repository
+        self.parent = parent
 
     def __hashable__(self):
         raise NotImplementedError
@@ -20,8 +20,8 @@ class Layer:
     def hash(self):
         if self._hash is None:
             h = hashlib.sha1()
-            if self._parent is not None:
-                h.update(self._parent.hash())
+            if self.parent is not None:
+                h.update(self.parent.hash())
             for chunk in self.__hashable__():
                 h.update(chunk)
             self._hash = h.digest()
@@ -31,7 +31,7 @@ class Layer:
         return binascii.hexlify(self.hash()).decode('ascii')[:12]
 
     def image(self):
-        return Image('{}:{}'.format(self._repository, self.version()))
+        return Image('{}:{}'.format(self.repository, self.version()))
 
 
 class DockerfileLayer(Layer):
