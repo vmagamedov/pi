@@ -27,3 +27,34 @@ class Context:
             path.append(parent)
             parent = path[-1].parent
         return tuple(reversed(path))
+
+    def layer_exists(self, image):
+        from .client import APIError
+
+        try:
+            self.client.inspect_image(image.name)
+        except APIError as e:
+            if e.response.status_code == 404:
+                return False
+            raise
+        else:
+            return True
+
+    def maybe_pull(self, image, printer):
+        from .client import APIError
+
+        try:
+            output = self.client.pull(image.name, stream=True)
+        except APIError as e:
+            if e.response.status_code == 404:
+                return False
+            raise
+        else:
+            printer(output)
+            return True
+
+    def image_build_dockerfile(self, image, file_name, printer):
+        with open(file_name, 'rb') as f:
+            output = self.client.build(tag=image.name, fileobj=f,
+                                       rm=True, stream=True)
+            printer(self.client, output)

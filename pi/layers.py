@@ -14,6 +14,9 @@ class Layer:
         self.repository = repository
         self.parent = parent
 
+    def accept(self, visitor):
+        raise NotImplementedError
+
     def __hashable__(self):
         raise NotImplementedError
 
@@ -40,6 +43,9 @@ class DockerfileLayer(Layer):
         super().__init__(name, repository, parent=parent)
         self.file_name = file_name
 
+    def accept(self, visitor):
+        return visitor.visit_dockerfile(self)
+
     def __hashable__(self):
         with open(self.file_name, 'rb') as f:
             return [f.read()]
@@ -50,6 +56,9 @@ class AnsibleTasksLayer(Layer):
     def __init__(self, name, repository, ansible_tasks, *, parent=None):
         super().__init__(name, repository, parent=parent)
         self.ansible_tasks = ansible_tasks
+
+    def accept(self, visitor):
+        return visitor.visit_ansible_tasks(self)
 
     def __hashable__(self):
         return [repr(self.ansible_tasks).encode('utf-8')]

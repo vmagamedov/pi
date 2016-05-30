@@ -3,16 +3,35 @@ from functools import partial
 import click
 
 from .layers import DockerfileLayer, AnsibleTasksLayer, Image
+from .client import echo_download_progress, echo_build_progress
 
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
 
-def _build_layer(ctx, *, name):
+class Builder(object):
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def visit(self, layer):
+        return layer.accept(self)
+
+    def visit_dockerfile(self, layer):
+        self.ctx.obj.image_build_dockerfile(layer.image(), layer.file_name,
+                                            echo_build_progress)
+
+
+def _build_image(ctx, *, name):
     layers = ctx.obj.layers_path(name)
     for layer in layers:
-        # check local, check remote, build local
-        print('Building layer {!r}'.format(layer.image()))
+        image = layer.image()
+        if not ctx.obj.layer_exists(image):
+            if not ctx.obj.maybe_pull(image, echo_download_progress):
+                Builder(ctx).visit(layer)
+        else:
+            click.echo('Already exists: {}'
+                       .format(layer.image().name))
 
 
 def build_images_cli(layers):
@@ -22,7 +41,7 @@ def build_images_cli(layers):
     build_help = BUILD_NO_IMAGES if not layers else None
     build_group = click.Group('build', help=build_help)
     for layer in layers:
-        callback = partial(_build_layer, name=layer.name)
+        callback = partial(_build_image, name=layer.name)
         callback = click.pass_context(callback)
         cmd = click.Command(layer.name, callback=callback)
         build_group.add_command(cmd)
