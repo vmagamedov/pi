@@ -136,7 +136,7 @@ def run(self, client, input_fd, image, command):
             return
 
         width, height = click.get_terminal_size()
-        yield from self.exec(client.resize, c, width, height)
+        yield from self.exec(client.resize, c, height, width)
 
         params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
         with (yield from self.exec(client.attach_socket, c, params)) as sock_io:

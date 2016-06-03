@@ -1,9 +1,14 @@
+from itertools import chain
 from functools import partial
 
 import click
 
+from .run import run
 from .layers import DockerfileLayer, AnsibleTasksLayer, Image
 from .client import echo_download_progress, echo_build_progress
+from .actors import init
+from .console import pretty
+from .console import raw_stdin
 
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
@@ -34,7 +39,32 @@ def _build_image(ctx, *, name):
                        .format(layer.image().name))
 
 
-def build_images_cli(layers):
+@click.command('list')
+@click.pass_context
+def image_list(ctx):
+    images = ctx.obj.client.images()
+    tags = set(chain.from_iterable(i['RepoTags'] for i in images))
+    for name in sorted(ctx.obj.layers.keys()):
+        image_name = ctx.obj.layers[name].image().name
+        if image_name in tags:
+            click.echo(pretty('\u2714 {_green}{}{_r}: {}', name, image_name))
+        else:
+            click.echo(pretty('\u2717 {_red}{}{_r}: {}', name, image_name))
+
+
+@click.command('shell')
+@click.argument('name')
+@click.pass_context
+def image_shell(ctx, name):
+    if name in ctx.obj.layers:
+        image = ctx.obj.layers[name].image()
+    else:
+        image = Image(name)
+    with raw_stdin() as fd:
+        init(run, ctx.obj.client, fd, image, '/bin/bash')
+
+
+def create_images_cli(layers):
     cli = click.Group()
     image_group = click.Group('image')
 
@@ -46,6 +76,9 @@ def build_images_cli(layers):
         cmd = click.Command(layer.name, callback=callback)
         build_group.add_command(cmd)
     image_group.add_command(build_group)
+
+    image_group.add_command(image_list)
+    image_group.add_command(image_shell)
 
     cli.add_command(image_group)
     return cli

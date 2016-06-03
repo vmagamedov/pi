@@ -133,7 +133,7 @@ def create_command(name, data):
     return command
 
 
-def build_commands_cli(config):
+def create_commands_cli(config):
     groups_set = set()
     commands_map = dict()
 

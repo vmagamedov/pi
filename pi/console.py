@@ -1,8 +1,8 @@
 import sys
 import tty
 import termios
+import contextlib
 import logging.config
-from contextlib import contextmanager
 
 
 COLORS = {
@@ -12,11 +12,15 @@ COLORS = {
     '_magenta': '\x1b[38;5;5m',
     '_cyan': '\x1b[38;5;6m',
     '_darkgray': '\x1b[38;5;8m',
-    '_reset': '\x1b[0m',
+    '_r': '\x1b[0m',
 }
 
+NO_COLORS = {k: '' for k in COLORS}
 
-@contextmanager
+AUTO_COLORS = COLORS if sys.stdout.isatty() else NO_COLORS
+
+
+@contextlib.contextmanager
 def raw_stdin(cbreak=True):
     if sys.stdin.isatty():
         fd = sys.stdin.fileno()
@@ -60,3 +64,8 @@ def configure_logging(debug):
         })
     else:
         log.disabled = True
+
+
+def pretty(string, *args, **kwargs):
+    kwargs.update(AUTO_COLORS)
+    return string.format(*args, **kwargs) + AUTO_COLORS['_r']
