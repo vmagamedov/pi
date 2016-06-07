@@ -103,7 +103,7 @@ def construct_layer(name, data, parent):
 
 
 def resolve_deps(deps):
-    while True:
+    while deps:
         resolved = set()
         for name, parent_name in deps.items():
             if parent_name not in deps:
@@ -115,8 +115,6 @@ def resolve_deps(deps):
         for name in resolved:
             yield name, deps[name]
         deps = {k: v for k, v in deps.items() if k not in resolved}
-        if not deps:
-            return
 
 
 def construct_layers(config):
