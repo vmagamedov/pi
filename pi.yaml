@@ -6,7 +6,7 @@ commands:
     shell: echo "Hello {{name}}!!!"
 
   ping:
-    image: !docker ubuntu:trusty
+    image: !DockerImage ubuntu:trusty
     call: ping
 
 images:

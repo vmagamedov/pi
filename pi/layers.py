@@ -1,9 +1,7 @@
 import hashlib
 import binascii
-import collections
 
-
-Image = collections.namedtuple('Image', 'name')
+from .types import DockerImage
 
 
 class Layer:
@@ -34,7 +32,7 @@ class Layer:
         return binascii.hexlify(self.hash()).decode('ascii')[:12]
 
     def image(self):
-        return Image('{}:{}'.format(self.repository, self.version()))
+        return DockerImage('{}:{}'.format(self.repository, self.version()))
 
 
 class DockerfileLayer(Layer):

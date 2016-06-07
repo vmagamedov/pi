@@ -4,7 +4,8 @@ from functools import partial
 import click
 
 from .run import run
-from .layers import DockerfileLayer, AnsibleTasksLayer, Image
+from .types import DockerImage
+from .layers import DockerfileLayer, AnsibleTasksLayer
 from .client import echo_download_progress, echo_build_progress
 from .actors import init
 from .console import pretty
@@ -59,7 +60,7 @@ def image_shell(ctx, name):
     if name in ctx.obj.layers:
         image = ctx.obj.layers[name].image()
     else:
-        image = Image(name)
+        image = DockerImage(name)
     with raw_stdin() as fd:
         init(run, ctx.obj.client, fd, image, '/bin/bash')
 
@@ -125,7 +126,7 @@ def construct_layers(config):
     for name, data in config.get('images', {}).items():
         if 'from' in data:
             from_ = data['from']
-            if not isinstance(from_, Image):
+            if not isinstance(from_, DockerImage):
                 deps[name] = from_
                 data_by_name[name] = data
                 continue

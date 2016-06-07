@@ -1,5 +1,5 @@
 from .utils import cached_property
-from .layers import Image
+from .types import DockerImage
 
 
 class Context:
@@ -14,7 +14,7 @@ class Context:
         return get_client()
 
     def require_image(self, image):
-        if not isinstance(image, Image):
+        if not isinstance(image, DockerImage):
             layer = self.layers[image]
             image = layer.image()
         # check and autoload image

@@ -3,17 +3,19 @@ import os.path
 
 import yaml.loader
 
-from .layers import Image
+from . import types
 
 
 class Loader(yaml.loader.SafeLoader):
 
-    def construct_docker(self, node):
-        name = self.construct_scalar(node)
-        return Image(name)
+    @classmethod
+    def register(cls, type_):
+        cls.add_constructor(type_.__tag__, type_.construct)
 
 
-Loader.add_constructor('!docker', Loader.construct_docker)
+Loader.register(types.Image)
+Loader.register(types.Dockerfile)
+Loader.register(types.DockerImage)
 
 
 def read_config():
