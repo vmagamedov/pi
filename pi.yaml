@@ -1,23 +1,22 @@
-commands:
-  - !ShellCommand
-    name: app.echo
-    image: env
-    params:
-      - !Argument {name: name, default: World}
-    shell: echo "Hello {{name}}!!!"
+- !ShellCommand
+  name: app.echo
+  image: env
+  params:
+    - !Argument {name: name, default: World}
+  shell: echo "Hello {{name}}!!!"
 
-  - !SubCommand
-    name: ping
-    image: !DockerImage ubuntu:trusty
-    call: ping
+- !SubCommand
+  name: ping
+  image: !DockerImage ubuntu:trusty
+  call: ping
 
-images:
-  - !Image
-    name: env
-    repository: reg.local/env
-    provision-with: !Dockerfile Dockerfile.env
-  - !Image
-    name: app.env
-    from: env
-    repository: reg.local/app.env
-    provision-with: !AnsibleTasks [1, 2, 3]
+- !Image
+  name: env
+  repository: reg.local/env
+  provision-with: !Dockerfile Dockerfile.env
+
+- !Image
+  name: app.env
+  from: env
+  repository: reg.local/app.env
+  provision-with: !AnsibleTasks [1, 2, 3]

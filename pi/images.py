@@ -4,7 +4,7 @@ from functools import partial
 import click
 
 from .run import run
-from .types import DockerImage
+from .types import DockerImage, Image
 from .layers import Layer
 from .client import echo_download_progress, echo_build_progress
 from .actors import init
@@ -107,7 +107,7 @@ def construct_layers(config):
     layers = {}
     image_by_name = {}
 
-    images = config.get('images', [])
+    images = [i for i in config if isinstance(i, Image)]
     for image in images:
         if image.from_ is not None:
             if not isinstance(image.from_, DockerImage):
