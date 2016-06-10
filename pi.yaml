@@ -1,5 +1,5 @@
 - !ShellCommand
-  name: app.echo
+  name: app echo
   image: env
   params:
     - !Argument {name: name, default: World}

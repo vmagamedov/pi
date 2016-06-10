@@ -126,7 +126,7 @@ def create_commands_cli(config):
 
     commands = [i for i in config if isinstance(i, CommandType)]
     for command in commands:
-        command_path = tuple(command.name.split('.'))
+        command_path = tuple(command.name.split())
         group_parts, command_name = command_path[:-1], command_path[-1]
         assert command_path not in groups_set
         assert group_parts not in commands_map
