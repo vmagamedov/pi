@@ -16,7 +16,7 @@ class Context:
     def require_image(self, image):
         if not isinstance(image, DockerImage):
             layer = self.layers[image]
-            image = layer.image()
+            image = layer.docker_image()
         # check and autoload image
         return image
 

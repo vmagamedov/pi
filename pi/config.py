@@ -16,6 +16,7 @@ class Loader(yaml.loader.SafeLoader):
 Loader.register(types.Image)
 Loader.register(types.Dockerfile)
 Loader.register(types.DockerImage)
+Loader.register(types.AnsibleTasks)
 
 
 def read_config():

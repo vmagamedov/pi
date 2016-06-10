@@ -1,6 +1,19 @@
-from typing import Optional
+from typing import Optional, Union
 
 from .utils import ImmutableDict
+
+
+class Scalar:
+
+    @classmethod
+    def construct(cls, loader, node):
+        return cls(loader.construct_scalar(node))
+
+
+class Sequence:
+    @classmethod
+    def construct(cls, loader, node):
+        return cls(loader.construct_sequence(node))
 
 
 class Mapping:
@@ -16,11 +29,14 @@ class Mapping:
         return cls(**clean_params)
 
 
-class Scalar:
+class DockerImage(Scalar):
+    __tag__ = '!DockerImage'
 
-    @classmethod
-    def construct(cls, loader, node):
-        return cls(loader.construct_scalar(node))
+    def __init__(self, name: str):
+        self.name = name
+
+    def __repr__(self):
+        return '<{}({.name!r})>'.format(self.__tag__, self)
 
 
 class ProvisionType:
@@ -34,7 +50,23 @@ class Dockerfile(ProvisionType, Scalar):
         self.file_name = file_name or 'Dockerfile'
 
     def __repr__(self):
-        return '<!Dockerfile({.file_name!r})>'.format(self)
+        return '<{}({.file_name!r})>'.format(self.__tag__, self)
+
+    def accept(self, visitor):
+        return visitor.visit_dockerfile(self)
+
+
+class AnsibleTasks(ProvisionType, Sequence):
+    __tag__ = '!AnsibleTasks'
+
+    def __init__(self, tasks: list):
+        self.tasks = tasks
+
+    def __repr__(self):
+        return '<{}([count={:d}])>'.format(self.__tag__, len(self.tasks))
+
+    def accept(self, visitor):
+        return visitor.visit_ansibletasks(self)
 
 
 class Image(Mapping):
@@ -42,30 +74,21 @@ class Image(Mapping):
     __params__ = ImmutableDict([
         ('name', 'name'),
         ('repository', 'repository'),
-        ('from', 'from_'),
         ('provision-with', 'provision_with'),
+        ('from', 'from_'),
     ])
 
-    def __init__(self, name: str, repository: str, from_: str,
-                 provision_with: ProvisionType):
+    def __init__(self, name: str, repository: str,
+                 provision_with: ProvisionType,
+                 from_: Optional[Union[DockerImage, str]]=None):
         self.name = name
         self.repository = repository
-        self.from_ = from_
         self.provision_with = provision_with
+        self.from_ = from_
 
     def __repr__(self):
         return (
             '<!Image(name={0.name!r} repository={0.repository!r} '
-            'from={0.from_!r} provision-with={0.provision_with!r})>'
+            'provision-with={0.provision_with!r} from={0.from_!r})>'
             .format(self)
         )
-
-
-class DockerImage(Scalar):
-    __tag__ = '!DockerImage'
-
-    def __init__(self, name: str):
-        self.name = name
-
-    def __repr__(self):
-        return '<!DockerImage({.name!r})>'.format(self)

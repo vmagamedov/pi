@@ -10,11 +10,12 @@ commands:
     call: ping
 
 images:
-  env:
+  - !Image
+    name: env
     repository: reg.local/env
-    docker-file: Dockerfile.env
-
-  app.env:
-    repository: reg.local/app.env
+    provision-with: !Dockerfile Dockerfile.env
+  - !Image
+    name: app.env
     from: env
-    ansible-tasks: []
+    repository: reg.local/app.env
+    provision-with: !AnsibleTasks [1, 2, 3]

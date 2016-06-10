@@ -5,7 +5,7 @@ import click
 
 from .run import run
 from .types import DockerImage
-from .layers import DockerfileLayer, AnsibleTasksLayer
+from .layers import Layer
 from .client import echo_download_progress, echo_build_progress
 from .actors import init
 from .console import pretty
@@ -17,27 +17,29 @@ BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
 class Builder(object):
 
-    def __init__(self, ctx):
+    def __init__(self, layer, ctx):
+        self.layer = layer
         self.ctx = ctx
 
-    def visit(self, layer):
-        return layer.accept(self)
+    def visit(self, obj):
+        return obj.accept(self)
 
-    def visit_dockerfile(self, layer):
-        self.ctx.obj.image_build_dockerfile(layer.image(), layer.file_name,
+    def visit_dockerfile(self, obj):
+        self.ctx.obj.image_build_dockerfile(self.layer.docker_image(),
+                                            obj.file_name,
                                             echo_build_progress)
 
 
 def _build_image(ctx, *, name):
     layers = ctx.obj.layers_path(name)
     for layer in layers:
-        image = layer.image()
-        if not ctx.obj.layer_exists(image):
-            if not ctx.obj.maybe_pull(image, echo_download_progress):
-                Builder(ctx).visit(layer)
+        docker_image = layer.docker_image()
+        if not ctx.obj.layer_exists(docker_image):
+            if not ctx.obj.maybe_pull(docker_image, echo_download_progress):
+                Builder(layer, ctx).visit(layer.provision_with)
         else:
             click.echo('Already exists: {}'
-                       .format(layer.image().name))
+                       .format(docker_image.name))
 
 
 @click.command('list')
@@ -46,7 +48,7 @@ def image_list(ctx):
     images = ctx.obj.client.images()
     tags = set(chain.from_iterable(i['RepoTags'] for i in images))
     for name in sorted(ctx.obj.layers.keys()):
-        image_name = ctx.obj.layers[name].image().name
+        image_name = ctx.obj.layers[name].docker_image().name
         if image_name in tags:
             click.echo(pretty('\u2714 {_green}{}{_r}: {}', name, image_name))
         else:
@@ -58,7 +60,7 @@ def image_list(ctx):
 @click.pass_context
 def image_shell(ctx, name):
     if name in ctx.obj.layers:
-        image = ctx.obj.layers[name].image()
+        image = ctx.obj.layers[name].docker_image()
     else:
         image = DockerImage(name)
     with raw_stdin() as fd:
@@ -85,24 +87,6 @@ def create_images_cli(layers):
     return cli
 
 
-def construct_layer(name, data, parent):
-    data = data.copy()
-    repository = data.pop('repository')
-    if 'docker-file' in data:
-        dockerfile = data.pop('docker-file')
-        layer = DockerfileLayer(name, repository, dockerfile)
-    elif 'ansible-tasks' in data:
-        data.pop('from', None)
-        ansible_tasks = data.pop('ansible-tasks')
-        layer = AnsibleTasksLayer(name, repository, ansible_tasks,
-                                  parent=parent)
-    else:
-        raise ValueError('Image type is undefined: {}'.format(name))
-    if data:
-        raise ValueError('Unknown values: {}'.format(list(data.keys())))
-    return layer
-
-
 def resolve_deps(deps):
     while deps:
         resolved = set()
@@ -121,16 +105,16 @@ def resolve_deps(deps):
 def construct_layers(config):
     deps = {}
     layers = {}
-    data_by_name = {}
+    image_by_name = {}
 
-    for name, data in config.get('images', {}).items():
-        if 'from' in data:
-            from_ = data['from']
-            if not isinstance(from_, DockerImage):
-                deps[name] = from_
-                data_by_name[name] = data
+    images = config.get('images', [])
+    for image in images:
+        if image.from_ is not None:
+            if not isinstance(image.from_, DockerImage):
+                deps[image.name] = image.from_
+                image_by_name[image.name] = image
                 continue
-        layers[name] = construct_layer(name, data, None)
+        layers[image.name] = Layer(image, parent=None)
 
     # check missing parents
     missing = {name for name, parent_name in deps.items()
@@ -140,8 +124,8 @@ def construct_layers(config):
                         .format(', '.join(sorted(missing))))
 
     for name, parent_name in resolve_deps(deps):
-        data = data_by_name[name]
+        image = image_by_name[name]
         parent = layers[parent_name]
-        layers[name] = construct_layer(name, data, parent)
+        layers[name] = Layer(image, parent=parent)
 
     return list(layers.values())
