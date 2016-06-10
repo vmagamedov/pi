@@ -31,3 +31,19 @@ class cached_property(object):
             return self
         value = obj.__dict__[self.func.__name__] = self.func(obj)
         return value
+
+
+class ImmutableDict(dict):
+    _hash = None
+
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = hash(frozenset(self.items()))
+        return self._hash
+
+    def _immutable(self):
+        raise TypeError("{} object is immutable"
+                        .format(self.__class__.__name__))
+
+    __delitem__ = __setitem__ = _immutable
+    clear = pop = popitem = setdefault = update = _immutable
