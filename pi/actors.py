@@ -43,10 +43,10 @@ def _spawn(func, args=None, kwargs=None, *, loop):
     return process
 
 
-def terminate(process):
+def terminate(process, *, wait=1):
     process.task.cancel()
     try:
-        yield from asyncio.wait_for(process.task, 1, loop=process.loop)
+        yield from asyncio.wait_for(process.task, wait, loop=process.loop)
     except asyncio.CancelledError:
         pass
 
@@ -61,10 +61,11 @@ def receive(process):
 
 class Terminator:
 
-    def __init__(self, signals, processes, *, loop):
+    def __init__(self, signals, processes, *, loop, wait_exit=5):
         self._signals = signals
         self._processes = processes
         self._loop = loop
+        self._wait_exit = wait_exit
         self._exit_event = asyncio.Event()
 
     def install(self):
@@ -75,7 +76,7 @@ class Terminator:
     def _exit(self):
         try:
             for p in self._processes:
-                yield from terminate(p)
+                yield from terminate(p, wait=self._wait_exit)
         finally:
             self._loop.call_soon(self._loop.stop)
 
@@ -98,3 +99,4 @@ def init(coro_func, *args, **kwargs):
     terminator.install()
 
     loop.run_forever()
+    return process.task.result()

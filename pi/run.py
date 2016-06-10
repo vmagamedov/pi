@@ -5,6 +5,7 @@ import logging
 from asyncio import Queue, CancelledError
 
 import click
+import requests
 
 from .client import APIError
 from .actors import receive, send, MessageType, terminate
@@ -118,7 +119,7 @@ def socket_writer(self, sock):
             raise TypeError(type_)
 
 
-def run(self, client, input_fd, image, command):
+def run(self, client, input_fd, image, command, *, wait_exit=1):
     try:
         c = yield from self.exec(client.create_container,
                                  image=image.name,
@@ -150,14 +151,23 @@ def run(self, client, input_fd, image, command):
             output_proc = self.spawn(output)
             socket_reader_proc = self.spawn(socket_reader, sock, output_proc)
 
+            exit_code = None
             try:
                 yield from self.wait([socket_reader_proc])
             except CancelledError:
+                try:
+                    exit_code = yield from self.exec(client.wait, c, wait_exit)
+                except requests.Timeout:
+                    yield from self.exec(client.kill, c)
                 yield from terminate(socket_reader_proc)
 
             yield from terminate(output_proc)
             yield from terminate(input_proc)
             yield from terminate(socket_writer_proc)
+
+        if exit_code is None:
+            exit_code = yield from self.exec(client.wait, c)
+        return exit_code
 
     finally:
         yield from self.exec(client.remove_container, c, v=True, force=True)

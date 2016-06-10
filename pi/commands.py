@@ -58,8 +58,7 @@ def render_template(template, params):
 
 def execute(client, image, command):
     with raw_stdin() as fd:
-        init(run, client, fd, image, command)
-    return 0  # TODO: return real exit code
+        return init(run, client, fd, image, command)
 
 
 class _ParameterCreator:
@@ -89,7 +88,8 @@ class _CommandCreator:
 
     def visit_shellcommand(self, command):
         params_creator = _ParameterCreator()
-        params = [params_creator.visit(param) for param in command.params]
+        params = [params_creator.visit(param)
+                  for param in (command.params or [])]
 
         @click.pass_context
         def cb(ctx, **kw):

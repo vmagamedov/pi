@@ -64,7 +64,7 @@ def image_shell(ctx, name):
     else:
         image = DockerImage(name)
     with raw_stdin() as fd:
-        init(run, ctx.obj.client, fd, image, '/bin/bash')
+        ctx.exit(init(run, ctx.obj.client, fd, image, '/bin/bash'))
 
 
 def create_images_cli(layers):

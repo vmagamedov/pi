@@ -151,8 +151,8 @@ class ShellCommand(CommandType, Mapping):
         ('help', 'help'),
     ])
 
-    def __init__(self, name: str, image: Union[DockerImage, str],
-                 params: List[ParameterType], shell: str,
+    def __init__(self, name: str, image: Union[DockerImage, str], shell: str,
+                 params: Optional[List[ParameterType]]=None,
                  help: Optional[str]=None):
         self.name = name
         self.image = image
