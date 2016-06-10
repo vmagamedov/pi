@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Union, List, Any
 
 from .utils import ImmutableDict
 
@@ -11,6 +11,7 @@ class Scalar:
 
 
 class Sequence:
+
     @classmethod
     def construct(cls, loader, node):
         return cls(loader.construct_sequence(node))
@@ -40,7 +41,9 @@ class DockerImage(Scalar):
 
 
 class ProvisionType:
-    pass
+
+    def accept(self, visitor):
+        raise NotImplementedError
 
 
 class Dockerfile(ProvisionType, Scalar):
@@ -88,7 +91,94 @@ class Image(Mapping):
 
     def __repr__(self):
         return (
-            '<!Image(name={0.name!r} repository={0.repository!r} '
+            '<{0.__tag__}(name={0.name!r} repository={0.repository!r} '
             'provision-with={0.provision_with!r} from={0.from_!r})>'
             .format(self)
         )
+
+
+class ParameterType:
+    __params__ = ImmutableDict([
+        ('name', 'name'),
+        ('type', 'type'),
+        ('default', 'default'),
+    ])
+
+    def __init__(self, name: str, type: Optional[str]=None,
+                 default: Optional[Any]=None):
+        self.name = name
+        self.type = type
+        self.default = default
+
+    def __repr__(self):
+        return (
+            '<{0.__tag__}(name={0.name!r} type={0.type!r} '
+            'default={0.default!r})>'
+            .format(self)
+        )
+
+    def accept(self, visitor):
+        raise NotImplementedError
+
+
+class Argument(ParameterType, Mapping):
+    __tag__ = '!Argument'
+
+    def accept(self, visitor):
+        return visitor.visit_argument(self)
+
+
+class Option(ParameterType, Mapping):
+    __tag__ = '!Option'
+
+    def accept(self, visitor):
+        return visitor.visit_option(self)
+
+
+class CommandType:
+
+    def accept(self, visitor):
+        raise NotImplementedError
+
+
+class ShellCommand(CommandType, Mapping):
+    __tag__ = '!ShellCommand'
+    __params__ = ImmutableDict([
+        ('name', 'name'),
+        ('image', 'image'),
+        ('params', 'params'),
+        ('shell', 'shell'),
+        ('help', 'help'),
+    ])
+
+    def __init__(self, name: str, image: Union[DockerImage, str],
+                 params: List[ParameterType], shell: str,
+                 help: Optional[str]=None):
+        self.name = name
+        self.image = image
+        self.params = params
+        self.shell = shell
+        self.help = help
+
+    def accept(self, visitor):
+        return visitor.visit_shellcommand(self)
+
+
+class SubCommand(CommandType, Mapping):
+    __tag__ = '!SubCommand'
+    __params__ = ImmutableDict([
+        ('name', 'name'),
+        ('image', 'image'),
+        ('call', 'call'),
+        ('help', 'help'),
+    ])
+
+    def __init__(self, name: str, image: Union[DockerImage, str],
+                 call: Union[str, List[str]], help: Optional[str]=None):
+        self.name = name
+        self.image = image
+        self.call = call
+        self.help = help
+
+    def accept(self, visitor):
+        return visitor.visit_subcommand(self)

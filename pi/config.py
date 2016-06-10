@@ -17,6 +17,10 @@ Loader.register(types.Image)
 Loader.register(types.Dockerfile)
 Loader.register(types.DockerImage)
 Loader.register(types.AnsibleTasks)
+Loader.register(types.Argument)
+Loader.register(types.Option)
+Loader.register(types.ShellCommand)
+Loader.register(types.SubCommand)
 
 
 def read_config():

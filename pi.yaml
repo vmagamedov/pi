@@ -1,11 +1,13 @@
 commands:
-  echo:
+  - !ShellCommand
+    name: app.echo
     image: env
-    arguments:
-      - name: default=World
+    params:
+      - !Argument {name: name, default: World}
     shell: echo "Hello {{name}}!!!"
 
-  ping:
+  - !SubCommand
+    name: ping
     image: !DockerImage ubuntu:trusty
     call: ping
 

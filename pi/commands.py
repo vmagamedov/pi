@@ -45,14 +45,6 @@ TYPES_MAP = {
 }
 
 
-def parse_attrs(attrs):
-    d = dict(i.split('=') for i in attrs.split())
-    type_ = TYPES_MAP[d.pop('type', 'str')]
-    default = d.pop('default', None)
-    assert not d, d
-    return {'type': type_, 'default': default}
-
-
 def get_short_help(help):
     lines = help.splitlines()
     return lines[0]
@@ -69,98 +61,91 @@ def execute(client, image, command):
     return 0  # TODO: return real exit code
 
 
-def create_proxy_command(name, image, prefix, help):
-    if isinstance(prefix, str):
-        prefix = shlex.split(prefix)
+class _ParameterCreator:
 
-    @click.pass_context
-    def cb(ctx, args):
-        docker_image = ctx.obj.require_image(image)
-        exit_code = execute(ctx.obj.client, docker_image, prefix + args)
-        ctx.exit(exit_code)
+    def visit(self, param):
+        return param.accept(self)
 
-    short_help = get_short_help(help) if help else None
-    return ProxyCommand(name, callback=cb,
-                        help=help, short_help=short_help)
+    def visit_argument(self, param):
+        cli_type = TYPES_MAP[param.type or 'str']
+        return click.Argument([param.name], type=cli_type,
+                              default=param.default)
 
-
-def create_shell_command(name, image, args, options, template, help):
-    params = []
-    for arg in args:
-        (arg_name, attrs), = arg.items()
-        arg_kwargs = parse_attrs(attrs)
-        params.append(click.Argument([arg_name], **arg_kwargs))
-    for opt in options:
-        (opt_name, attrs), = opt.items()
-        opt_kwargs = parse_attrs(attrs)
-        opt_decl = ('-' if len(opt_name) == 1 else '--') + opt_name
-        params.append(click.Option([opt_decl], **opt_kwargs))
-
-    @click.pass_context
-    def cb(ctx, **kw):
-        docker_image = ctx.obj.require_image(image)
-        code = render_template(template, kw)
-        command = ['/bin/bash', '-c', code]
-        exit_code = execute(ctx.obj.client, docker_image, command)
-        ctx.exit(exit_code)
-
-    short_help = get_short_help(help) if help else None
-    return click.Command(name, params=params, callback=cb,
-                         help=help, short_help=short_help)
+    def visit_option(self, param):
+        opt_decl = ('-' if len(param.name) == 1 else '--') + param.name
+        cli_type = TYPES_MAP[param.type or 'str']
+        return click.Option([opt_decl], type=cli_type,
+                            default=param.default)
 
 
-def create_command(name, data):
-    data = data.copy()
-    image = data.pop('image', None)
-    help = data.pop('help', None)
-    if image is None:
-        raise ValueError('Image is not specified ({})'.format(name))
-    if 'shell' in data:
-        args = data.pop('arguments', [])
-        options = data.pop('options', [])
-        template = data.pop('shell')
-        command = create_shell_command(name, image, args, options,
-                                       template, help)
-    elif 'call' in data:
-        prefix = data.pop('call')
-        if not isinstance(prefix, (str, list)):
-            raise TypeError('"call" value should be a list or string')
-        command = create_proxy_command(name, image, prefix, help)
-    else:
-        raise ValueError('Command "{}" has nothing to call'.format(name))
-    if data:
-        raise ValueError('Unknown values: {}'.format(list(data.keys())))
-    return command
+class _CommandCreator:
+
+    def __init__(self, name):
+        self.name = name
+
+    def visit(self, command):
+        return command.accept(self)
+
+    def visit_shellcommand(self, command):
+        params_creator = _ParameterCreator()
+        params = [params_creator.visit(param) for param in command.params]
+
+        @click.pass_context
+        def cb(ctx, **kw):
+            docker_image = ctx.obj.require_image(command.image)
+            code = render_template(command.shell, kw)
+            exit_code = execute(ctx.obj.client, docker_image,
+                                ['sh', '-c', code])
+            ctx.exit(exit_code)
+
+        short_help = get_short_help(command.help) if command.help else None
+        return click.Command(self.name, params=params, callback=cb,
+                             help=command.help, short_help=short_help)
+
+    def visit_subcommand(self, command):
+        if isinstance(command.call, str):
+            call = shlex.split(command.call)
+        else:
+            call = command.call
+
+        @click.pass_context
+        def cb(ctx, args):
+            docker_image = ctx.obj.require_image(command.image)
+            exit_code = execute(ctx.obj.client, docker_image, call + args)
+            ctx.exit(exit_code)
+
+        short_help = get_short_help(command.help) if command.help else None
+        return ProxyCommand(self.name, callback=cb,
+                            help=command.help, short_help=short_help)
 
 
 def create_commands_cli(config):
     groups_set = set()
     commands_map = dict()
 
-    commands_data = config.get('commands', {})
-    for command_path, command_data in commands_data.items():
-        command_parts = tuple(command_path.split('.'))
-        group_parts, command_name = command_parts[:-1], command_parts[-1]
-        assert command_parts not in groups_set
+    for command in config.get('commands', []):
+        command_path = tuple(command.name.split('.'))
+        group_parts, command_name = command_path[:-1], command_path[-1]
+        assert command_path not in groups_set
         assert group_parts not in commands_map
         if group_parts:
             groups_set.add(group_parts)
-        commands_map[command_parts] = command_data
+        commands_map[command_path] = command
 
     groups, mapping = create_groups(groups_set)
 
-    commands = []
-    for command_parts, command_data in commands_map.items():
-        group_parts, command_name = command_parts[:-1], command_parts[-1]
-        command = create_command(command_name, command_data)
+    cli_commands = []
+    for command_path, command in commands_map.items():
+        group_parts, command_name = command_path[:-1], command_path[-1]
+        cli_command = _CommandCreator(command_name).visit(command)
         if group_parts in mapping:
-            mapping[group_parts].add_command(command)
+            mapping[group_parts].add_command(cli_command)
         else:
-            commands.append(command)
+            cli_commands.append(cli_command)
 
     cli = click.Group()
     for group in groups:
         cli.add_command(group)
-    for command in commands:
-        cli.add_command(command)
+    for cli_command in cli_commands:
+        cli.add_command(cli_command)
     return cli
