@@ -1,7 +1,7 @@
 from itertools import chain
 from functools import partial
 
-import click
+from ._requires import click
 
 from .run import run
 from .types import DockerImage, Image

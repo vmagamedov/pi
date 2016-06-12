@@ -1,7 +1,7 @@
 import shlex
 
-import click
-import jinja2
+from ._requires import click
+from ._requires import jinja2
 
 from .run import run
 from .types import CommandType

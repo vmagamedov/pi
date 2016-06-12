@@ -1,12 +1,13 @@
 import codecs
 import os.path
 
-import yaml.loader
+from ._requires.yaml import load as yaml_load
+from ._requires.yaml import loader as yaml_loader
 
 from . import types
 
 
-class Loader(yaml.loader.SafeLoader):
+class Loader(yaml_loader.SafeLoader):
 
     @classmethod
     def register(cls, type_):
@@ -27,5 +28,5 @@ def read_config():
     config = {}
     if os.path.exists('pi.yaml'):
         with codecs.open('pi.yaml', encoding='utf-8') as f:
-            config = yaml.load(f.read(), Loader) or {}
+            config = yaml_load(f.read(), Loader) or {}
     return config

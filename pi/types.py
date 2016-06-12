@@ -1,4 +1,4 @@
-from typing import Optional, Union, List, Any
+from ._requires.typing import Optional, Union, List, Any
 
 from .utils import ImmutableDict
 

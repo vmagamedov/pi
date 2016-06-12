@@ -3,10 +3,10 @@ import sys
 import json
 import logging
 
-import docker.errors
+from ._requires.docker import Client, errors
 
 
-APIError = docker.errors.APIError
+APIError = errors.APIError
 
 log = logging.getLogger(__name__)
 
@@ -68,4 +68,4 @@ def echo_build_progress(client, output):
 
 
 def get_client():
-    return docker.Client.from_env()
+    return Client.from_env()

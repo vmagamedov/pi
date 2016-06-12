@@ -1,4 +1,4 @@
-import click
+from ._requires import click
 
 from .config import read_config
 from .images import create_images_cli, construct_layers

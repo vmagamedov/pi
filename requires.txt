@@ -1,0 +1,9 @@
+six==1.10.0
+click==6.6
+typing==3.5.2.2
+pyyaml==3.11
+jinja2==2.8
+requests==2.10.0
+docker-py==1.8.1
+markupsafe==0.23
+websocket-client==0.37.0

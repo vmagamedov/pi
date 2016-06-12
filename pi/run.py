@@ -4,8 +4,8 @@ import socket
 import logging
 from asyncio import Queue, CancelledError
 
-import click
-import requests
+from ._requires import click
+from ._requires import requests
 
 from .client import APIError
 from .actors import receive, send, MessageType, terminate
