@@ -1,6 +1,10 @@
 from .cli import build_cli
 
 
-if __name__ == '__main__':
+def main():
     cli = build_cli()
     cli()
+
+
+if __name__ == '__main__':
+    main()

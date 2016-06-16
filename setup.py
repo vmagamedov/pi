@@ -10,4 +10,7 @@ setup(
     packages=find_packages(),
     license='BSD',
     install_requires=[],
+    entry_points={
+        'console_scripts': ['pi=pi.__main__:main'],
+    }
 )
