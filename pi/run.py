@@ -1,6 +1,6 @@
-import os
 import sys
 import socket
+import os.path
 import logging
 from asyncio import Queue, CancelledError
 
@@ -119,19 +119,52 @@ def socket_writer(self, sock):
             raise TypeError(type_)
 
 
-def run(self, client, input_fd, image, command, *, wait_exit=1):
+class _VolumeBinds:
+
+    @classmethod
+    def translate(cls, volumes):
+        self = cls()
+        return dict(self.visit(vol) for vol in volumes)
+
+    def visit(self, obj):
+        return obj.accept(self)
+
+    def visit_ro(self, obj):
+        return 'ro'
+
+    def visit_rw(self, obj):
+        return 'rw'
+
+    def visit_localpath(self, obj):
+        from_ = os.path.abspath(obj.from_)
+        # FIXME: implement proper errors reporting
+        assert os.path.exists(from_),\
+            'Local path does not exists: {}'.format(from_)
+        return from_, {'bind': obj.to, 'mode': self.visit(obj.mode)}
+
+    def visit_namedvolume(self, obj):
+        return obj.name, {'bind': obj.to, 'mode': self.visit(obj.mode)}
+
+
+def run(self, client, input_fd, image, command, *,
+        volumes=None,
+        wait_exit=1):
+    volumes = volumes or []
+    container_volumes = [v.to for v in volumes]
+    container_binds = _VolumeBinds.translate(volumes)
     try:
         c = yield from self.exec(client.create_container,
                                  image=image.name,
                                  command=command,
+                                 stdin_open=True,
                                  tty=True,
-                                 stdin_open=True)
+                                 volumes=container_volumes)
     except APIError as e:
         click.echo(e.explanation)
         return
     try:
         try:
-            yield from self.exec(client.start, c)
+            yield from self.exec(client.start, c, binds=container_binds)
         except APIError as e:
             click.echo(e.explanation)
             return

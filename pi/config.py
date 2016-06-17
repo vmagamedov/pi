@@ -22,6 +22,10 @@ Loader.register(types.Argument)
 Loader.register(types.Option)
 Loader.register(types.ShellCommand)
 Loader.register(types.SubCommand)
+Loader.register(types.RO)
+Loader.register(types.RW)
+Loader.register(types.LocalPath)
+Loader.register(types.NamedVolume)
 
 
 def read_config():

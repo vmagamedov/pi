@@ -3,6 +3,15 @@ from ._requires.typing import Optional, Union, List, Any
 from .utils import ImmutableDict
 
 
+class Simple:
+
+    @classmethod
+    def construct(cls, loader, node):
+        assert not loader.construct_scalar(node),\
+            '{}: No arguments expected'.format(cls.__tag__)
+        return cls()
+
+
 class Scalar:
 
     @classmethod
@@ -14,7 +23,7 @@ class Sequence:
 
     @classmethod
     def construct(cls, loader, node):
-        return cls(loader.construct_sequence(node))
+        return cls(loader.construct_sequence(node, deep=True))
 
 
 class Mapping:
@@ -22,7 +31,7 @@ class Mapping:
 
     @classmethod
     def construct(cls, loader, node):
-        params = loader.construct_mapping(node)
+        params = loader.construct_mapping(node, deep=True)
         unknown = set(params).difference(cls.__params__)
         if unknown:
             raise TypeError('Unknown params {!r} for {!r}'.format(unknown, cls))
@@ -97,6 +106,66 @@ class Image(Mapping):
         )
 
 
+class VolumeType:
+
+    def accept(self, visitor):
+        raise NotImplementedError
+
+
+class ModeType:
+
+    def accept(self, visitor):
+        raise NotImplementedError
+
+
+class RO(ModeType, Simple):
+    __tag__ = '!RO'
+
+    def accept(self, visitor):
+        return visitor.visit_ro(self)
+
+
+class RW(ModeType, Simple):
+    __tag__ = '!RW'
+
+    def accept(self, visitor):
+        return visitor.visit_rw(self)
+
+
+class LocalPath(VolumeType, Mapping):
+    __tag__ = '!LocalPath'
+    __params__ = ImmutableDict([
+        ('from', 'from_'),
+        ('to', 'to'),
+        ('mode', 'mode'),
+    ])
+
+    def __init__(self, from_: str, to: str, mode: ModeType=RO):
+        self.from_ = from_
+        self.to = to
+        self.mode = mode
+
+    def accept(self, visitor):
+        return visitor.visit_localpath(self)
+
+
+class NamedVolume(VolumeType, Mapping):
+    __tag__ = '!NamedVolume'
+    __params__ = ImmutableDict([
+        ('name', 'name'),
+        ('to', 'to'),
+        ('mode', 'mode'),
+    ])
+
+    def __init__(self, name: str, to: str, mode: ModeType = RO):
+        self.name = name
+        self.to = to
+        self.mode = mode
+
+    def accept(self, visitor):
+        return visitor.visit_namedvolume(self)
+
+
 class ParameterType:
     __params__ = ImmutableDict([
         ('name', 'name'),
@@ -148,16 +217,19 @@ class ShellCommand(CommandType, Mapping):
         ('image', 'image'),
         ('params', 'params'),
         ('shell', 'shell'),
+        ('volumes', 'volumes'),
         ('help', 'help'),
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str], shell: str,
                  params: Optional[List[ParameterType]]=None,
+                 volumes: List[VolumeType]=None,
                  help: Optional[str]=None):
         self.name = name
         self.image = image
         self.params = params
         self.shell = shell
+        self.volumes = volumes or []
         self.help = help
 
     def accept(self, visitor):
@@ -170,14 +242,18 @@ class SubCommand(CommandType, Mapping):
         ('name', 'name'),
         ('image', 'image'),
         ('call', 'call'),
+        ('volumes', 'volumes'),
         ('help', 'help'),
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str],
-                 call: Union[str, List[str]], help: Optional[str]=None):
+                 call: Union[str, List[str]],
+                 volumes: List[VolumeType]=None,
+                 help: Optional[str]=None):
         self.name = name
         self.image = image
         self.call = call
+        self.volumes = volumes or []
         self.help = help
 
     def accept(self, visitor):

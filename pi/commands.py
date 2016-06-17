@@ -56,9 +56,9 @@ def render_template(template, params):
     return t.render(params)
 
 
-def execute(client, image, command):
+def execute(client, image, command, *, volumes=None):
     with raw_stdin() as fd:
-        return init(run, client, fd, image, command)
+        return init(run, client, fd, image, command, volumes=volumes)
 
 
 class _ParameterCreator:
@@ -96,7 +96,8 @@ class _CommandCreator:
             docker_image = ctx.obj.require_image(command.image)
             code = render_template(command.shell, kw)
             exit_code = execute(ctx.obj.client, docker_image,
-                                ['sh', '-c', code])
+                                ['sh', '-c', code],
+                                volumes=command.volumes)
             ctx.exit(exit_code)
 
         short_help = get_short_help(command.help) if command.help else None
@@ -112,7 +113,9 @@ class _CommandCreator:
         @click.pass_context
         def cb(ctx, args):
             docker_image = ctx.obj.require_image(command.image)
-            exit_code = execute(ctx.obj.client, docker_image, call + args)
+            exit_code = execute(ctx.obj.client, docker_image,
+                                call + args,
+                                volumes=command.volumes)
             ctx.exit(exit_code)
 
         short_help = get_short_help(command.help) if command.help else None

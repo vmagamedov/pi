@@ -10,6 +10,13 @@
   image: !DockerImage ubuntu:trusty
   call: ping
 
+- !SubCommand
+  name: shell
+  image: !DockerImage ubuntu:xenial
+  call: /bin/bash
+  volumes:
+  - !LocalPath { from: ".", to: "/dst", mode: !RW }
+
 - !Image
   name: env
   repository: reg.local/env
