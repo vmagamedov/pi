@@ -36,7 +36,7 @@ def _build_image(ctx, *, name):
         docker_image = layer.docker_image()
         if not ctx.obj.layer_exists(docker_image):
             if not ctx.obj.maybe_pull(docker_image, echo_download_progress):
-                Builder(layer, ctx).visit(layer.provision_with)
+                Builder(layer, ctx).visit(layer.image.provision_with)
         else:
             click.echo('Already exists: {}'
                        .format(docker_image.name))
