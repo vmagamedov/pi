@@ -26,6 +26,7 @@ Loader.register(types.RO)
 Loader.register(types.RW)
 Loader.register(types.LocalPath)
 Loader.register(types.NamedVolume)
+Loader.register(types.Expose)
 
 
 def read_config():

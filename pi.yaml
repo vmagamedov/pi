@@ -16,6 +16,8 @@
   call: /bin/bash
   volumes:
   - !LocalPath { from: ".", to: "/dst", mode: !RW }
+  ports:
+  - !Expose { port: 8000, as: 8080 }
 
 - !Image
   name: env

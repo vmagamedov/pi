@@ -166,6 +166,23 @@ class NamedVolume(VolumeType, Mapping):
         return visitor.visit_namedvolume(self)
 
 
+class Expose(Mapping):
+    __tag__ = '!Expose'
+    __params__ = ImmutableDict([
+        ('port', 'port'),
+        ('as', 'as_'),
+        ('addr', 'addr'),
+        ('proto', 'proto'),
+    ])
+
+    def __init__(self, port: int, as_: int, addr: str='127.0.0.1',
+                 proto: str='tcp'):
+        self.port = port
+        self.as_ = as_
+        self.addr = addr
+        self.proto = proto
+
+
 class ParameterType:
     __params__ = ImmutableDict([
         ('name', 'name'),
@@ -218,18 +235,21 @@ class ShellCommand(CommandType, Mapping):
         ('params', 'params'),
         ('shell', 'shell'),
         ('volumes', 'volumes'),
+        ('ports', 'ports'),
         ('help', 'help'),
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str], shell: str,
                  params: Optional[List[ParameterType]]=None,
-                 volumes: List[VolumeType]=None,
+                 volumes: Optional[List[VolumeType]]=None,
+                 ports: Optional[List[Expose]]=None,
                  help: Optional[str]=None):
         self.name = name
         self.image = image
         self.params = params
         self.shell = shell
         self.volumes = volumes or []
+        self.ports = ports or []
         self.help = help
 
     def accept(self, visitor):
@@ -243,17 +263,20 @@ class SubCommand(CommandType, Mapping):
         ('image', 'image'),
         ('call', 'call'),
         ('volumes', 'volumes'),
+        ('ports', 'ports'),
         ('help', 'help'),
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str],
                  call: Union[str, List[str]],
-                 volumes: List[VolumeType]=None,
+                 volumes: Optional[List[VolumeType]]=None,
+                 ports: Optional[List[Expose]]=None,
                  help: Optional[str]=None):
         self.name = name
         self.image = image
         self.call = call
         self.volumes = volumes or []
+        self.ports = ports or []
         self.help = help
 
     def accept(self, visitor):

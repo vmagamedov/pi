@@ -5,7 +5,6 @@ import logging
 from asyncio import Queue, CancelledError
 
 from ._requires import click
-from ._requires import requests
 
 from .client import APIError
 from .actors import receive, send, MessageType, terminate
@@ -146,25 +145,39 @@ class _VolumeBinds:
         return obj.name, {'bind': obj.to, 'mode': self.visit(obj.mode)}
 
 
+def _port_binds(ports):
+    return {'{}/{}'.format(e.port, e.proto): {'HostPort': e.as_,
+                                              'HostIp': e.addr}
+            for e in ports}
+
+
 def run(self, client, input_fd, image, command, *,
-        volumes=None,
+        volumes=None, ports=None,
         wait_exit=3):
     volumes = volumes or []
     container_volumes = [v.to for v in volumes]
-    container_binds = _VolumeBinds.translate(volumes)
+    container_volume_binds = _VolumeBinds.translate(volumes)
+
+    ports = ports or []
+    container_ports = [(e.port, e.proto) for e in ports]
+    container_port_binds = _port_binds(ports)
+
     try:
         c = yield from self.exec(client.create_container,
                                  image=image.name,
                                  command=command,
                                  stdin_open=True,
                                  tty=True,
+                                 ports=container_ports,
                                  volumes=container_volumes)
     except APIError as e:
         click.echo(e.explanation)
         return
     try:
         try:
-            yield from self.exec(client.start, c, binds=container_binds)
+            yield from self.exec(client.start, c,
+                                 binds=container_volume_binds,
+                                 port_bindings=container_port_binds)
         except APIError as e:
             click.echo(e.explanation)
             return
