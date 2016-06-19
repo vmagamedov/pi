@@ -148,7 +148,7 @@ class _VolumeBinds:
 
 def run(self, client, input_fd, image, command, *,
         volumes=None,
-        wait_exit=1):
+        wait_exit=3):
     volumes = volumes or []
     container_volumes = [v.to for v in volumes]
     container_binds = _VolumeBinds.translate(volumes)
@@ -184,22 +184,17 @@ def run(self, client, input_fd, image, command, *,
             output_proc = self.spawn(output)
             socket_reader_proc = self.spawn(socket_reader, sock, output_proc)
 
-            exit_code = None
             try:
                 yield from self.wait([socket_reader_proc])
             except CancelledError:
-                try:
-                    exit_code = yield from self.exec(client.wait, c, wait_exit)
-                except requests.Timeout:
-                    yield from self.exec(client.kill, c)
+                yield from self.exec(client.stop, c, timeout=wait_exit)
                 yield from terminate(socket_reader_proc)
 
             yield from terminate(output_proc)
             yield from terminate(input_proc)
             yield from terminate(socket_writer_proc)
 
-        if exit_code is None:
-            exit_code = yield from self.exec(client.wait, c)
+        exit_code = yield from self.exec(client.wait, c)
         return exit_code
 
     finally:
