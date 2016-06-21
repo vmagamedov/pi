@@ -39,6 +39,16 @@ class Mapping:
         return cls(**clean_params)
 
 
+class Meta(Mapping):
+    __tag__ = '!Meta'
+    __params__ = ImmutableDict([
+        ('description', 'description'),
+    ])
+
+    def __init__(self, description: Optional[str]=None):
+        self.description = description
+
+
 class DockerImage(Scalar):
     __tag__ = '!DockerImage'
 
@@ -236,21 +246,21 @@ class ShellCommand(CommandType, Mapping):
         ('shell', 'shell'),
         ('volumes', 'volumes'),
         ('ports', 'ports'),
-        ('help', 'help'),
+        ('description', 'description'),
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str], shell: str,
                  params: Optional[List[ParameterType]]=None,
                  volumes: Optional[List[VolumeType]]=None,
                  ports: Optional[List[Expose]]=None,
-                 help: Optional[str]=None):
+                 description: Optional[str]=None):
         self.name = name
         self.image = image
         self.params = params
         self.shell = shell
         self.volumes = volumes or []
         self.ports = ports or []
-        self.help = help
+        self.description = description
 
     def accept(self, visitor):
         return visitor.visit_shellcommand(self)
@@ -264,20 +274,20 @@ class SubCommand(CommandType, Mapping):
         ('call', 'call'),
         ('volumes', 'volumes'),
         ('ports', 'ports'),
-        ('help', 'help'),
+        ('description', 'description'),
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str],
                  call: Union[str, List[str]],
                  volumes: Optional[List[VolumeType]]=None,
                  ports: Optional[List[Expose]]=None,
-                 help: Optional[str]=None):
+                 description: Optional[str]=None):
         self.name = name
         self.image = image
         self.call = call
         self.volumes = volumes or []
         self.ports = ports or []
-        self.help = help
+        self.description = description
 
     def accept(self, visitor):
         return visitor.visit_subcommand(self)

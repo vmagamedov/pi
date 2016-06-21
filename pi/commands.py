@@ -46,8 +46,8 @@ TYPES_MAP = {
 }
 
 
-def get_short_help(help):
-    lines = help.splitlines()
+def get_short_help(description):
+    lines = description.splitlines()
     return lines[0]
 
 
@@ -102,9 +102,12 @@ class _CommandCreator:
                                 ports=command.ports)
             ctx.exit(exit_code)
 
-        short_help = get_short_help(command.help) if command.help else None
+        short_help = None
+        if command.description is not None:
+            short_help = get_short_help(command.description)
         return click.Command(self.name, params=params, callback=cb,
-                             help=command.help, short_help=short_help)
+                             help=command.description,
+                             short_help=short_help)
 
     def visit_subcommand(self, command):
         if isinstance(command.call, str):
@@ -121,9 +124,11 @@ class _CommandCreator:
                                 ports=command.ports)
             ctx.exit(exit_code)
 
-        short_help = get_short_help(command.help) if command.help else None
+        short_help = None
+        if command.description is not None:
+            short_help = get_short_help(command.description)
         return ProxyCommand(self.name, callback=cb,
-                            help=command.help, short_help=short_help)
+                            help=command.description, short_help=short_help)
 
 
 def create_commands_cli(config):

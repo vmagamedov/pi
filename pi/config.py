@@ -14,6 +14,7 @@ class Loader(yaml_loader.SafeLoader):
         cls.add_constructor(type_.__tag__, type_.construct)
 
 
+Loader.register(types.Meta)
 Loader.register(types.Image)
 Loader.register(types.Dockerfile)
 Loader.register(types.DockerImage)
