@@ -1,9 +1,9 @@
-from ._requires.typing import Optional, Union, List, Any
+from ._requires.typing import Optional, Union, Any, Sequence
 
 from .utils import ImmutableDict
 
 
-class Simple:
+class SimpleConstruct:
 
     @classmethod
     def construct(cls, loader, node):
@@ -12,21 +12,21 @@ class Simple:
         return cls()
 
 
-class Scalar:
+class ScalarConstruct:
 
     @classmethod
     def construct(cls, loader, node):
         return cls(loader.construct_scalar(node))
 
 
-class Sequence:
+class SequenceConstruct:
 
     @classmethod
     def construct(cls, loader, node):
         return cls(loader.construct_sequence(node, deep=True))
 
 
-class Mapping:
+class MappingConstruct:
     __params__ = ImmutableDict()
 
     @classmethod
@@ -39,7 +39,7 @@ class Mapping:
         return cls(**clean_params)
 
 
-class Meta(Mapping):
+class Meta(MappingConstruct):
     __tag__ = '!Meta'
     __params__ = ImmutableDict([
         ('description', 'description'),
@@ -49,7 +49,7 @@ class Meta(Mapping):
         self.description = description
 
 
-class DockerImage(Scalar):
+class DockerImage(ScalarConstruct):
     __tag__ = '!DockerImage'
 
     def __init__(self, name: str):
@@ -65,7 +65,7 @@ class ProvisionType:
         raise NotImplementedError
 
 
-class Dockerfile(ProvisionType, Scalar):
+class Dockerfile(ProvisionType, ScalarConstruct):
     __tag__ = '!Dockerfile'
 
     def __init__(self, file_name: Optional[str]):
@@ -78,7 +78,7 @@ class Dockerfile(ProvisionType, Scalar):
         return visitor.visit_dockerfile(self)
 
 
-class AnsibleTasks(ProvisionType, Sequence):
+class AnsibleTasks(ProvisionType, SequenceConstruct):
     __tag__ = '!AnsibleTasks'
 
     def __init__(self, tasks: list):
@@ -91,7 +91,7 @@ class AnsibleTasks(ProvisionType, Sequence):
         return visitor.visit_ansibletasks(self)
 
 
-class Image(Mapping):
+class Image(MappingConstruct):
     __tag__ = '!Image'
     __params__ = ImmutableDict([
         ('name', 'name'),
@@ -128,21 +128,21 @@ class ModeType:
         raise NotImplementedError
 
 
-class RO(ModeType, Simple):
+class RO(ModeType, SimpleConstruct):
     __tag__ = '!RO'
 
     def accept(self, visitor):
         return visitor.visit_ro(self)
 
 
-class RW(ModeType, Simple):
+class RW(ModeType, SimpleConstruct):
     __tag__ = '!RW'
 
     def accept(self, visitor):
         return visitor.visit_rw(self)
 
 
-class LocalPath(VolumeType, Mapping):
+class LocalPath(VolumeType, MappingConstruct):
     __tag__ = '!LocalPath'
     __params__ = ImmutableDict([
         ('from', 'from_'),
@@ -159,7 +159,7 @@ class LocalPath(VolumeType, Mapping):
         return visitor.visit_localpath(self)
 
 
-class NamedVolume(VolumeType, Mapping):
+class NamedVolume(VolumeType, MappingConstruct):
     __tag__ = '!NamedVolume'
     __params__ = ImmutableDict([
         ('name', 'name'),
@@ -176,7 +176,7 @@ class NamedVolume(VolumeType, Mapping):
         return visitor.visit_namedvolume(self)
 
 
-class Expose(Mapping):
+class Expose(MappingConstruct):
     __tag__ = '!Expose'
     __params__ = ImmutableDict([
         ('port', 'port'),
@@ -217,14 +217,14 @@ class ParameterType:
         raise NotImplementedError
 
 
-class Argument(ParameterType, Mapping):
+class Argument(ParameterType, MappingConstruct):
     __tag__ = '!Argument'
 
     def accept(self, visitor):
         return visitor.visit_argument(self)
 
 
-class Option(ParameterType, Mapping):
+class Option(ParameterType, MappingConstruct):
     __tag__ = '!Option'
 
     def accept(self, visitor):
@@ -237,7 +237,7 @@ class CommandType:
         raise NotImplementedError
 
 
-class ShellCommand(CommandType, Mapping):
+class ShellCommand(CommandType, MappingConstruct):
     __tag__ = '!ShellCommand'
     __params__ = ImmutableDict([
         ('name', 'name'),
@@ -250,9 +250,9 @@ class ShellCommand(CommandType, Mapping):
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str], shell: str,
-                 params: Optional[List[ParameterType]]=None,
-                 volumes: Optional[List[VolumeType]]=None,
-                 ports: Optional[List[Expose]]=None,
+                 params: Optional[Sequence[ParameterType]]=None,
+                 volumes: Optional[Sequence[VolumeType]]=None,
+                 ports: Optional[Sequence[Expose]]=None,
                  description: Optional[str]=None):
         self.name = name
         self.image = image
@@ -266,7 +266,7 @@ class ShellCommand(CommandType, Mapping):
         return visitor.visit_shellcommand(self)
 
 
-class SubCommand(CommandType, Mapping):
+class SubCommand(CommandType, MappingConstruct):
     __tag__ = '!SubCommand'
     __params__ = ImmutableDict([
         ('name', 'name'),
@@ -278,9 +278,9 @@ class SubCommand(CommandType, Mapping):
     ])
 
     def __init__(self, name: str, image: Union[DockerImage, str],
-                 call: Union[str, List[str]],
-                 volumes: Optional[List[VolumeType]]=None,
-                 ports: Optional[List[Expose]]=None,
+                 call: Union[str, Sequence[str]],
+                 volumes: Optional[Sequence[VolumeType]]=None,
+                 ports: Optional[Sequence[Expose]]=None,
                  description: Optional[str]=None):
         self.name = name
         self.image = image
