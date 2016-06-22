@@ -1,15 +1,17 @@
+from enum import Enum
+
 from ._requires.typing import Optional, Union, Any, Sequence
 
 from .utils import ImmutableDict
 
 
-class SimpleConstruct:
+class EnumConstruct:
 
     @classmethod
     def construct(cls, loader, node):
         assert not loader.construct_scalar(node),\
-            '{}: No arguments expected'.format(cls.__tag__)
-        return cls()
+            '{}: No arguments expected'.format(cls.__name__)
+        return cls(node.tag)
 
 
 class ScalarConstruct:
@@ -122,24 +124,12 @@ class VolumeType:
         raise NotImplementedError
 
 
-class ModeType:
+class Mode(EnumConstruct, Enum):
+    RO = '!RO'
+    RW = '!RW'
 
     def accept(self, visitor):
-        raise NotImplementedError
-
-
-class RO(ModeType, SimpleConstruct):
-    __tag__ = '!RO'
-
-    def accept(self, visitor):
-        return visitor.visit_ro(self)
-
-
-class RW(ModeType, SimpleConstruct):
-    __tag__ = '!RW'
-
-    def accept(self, visitor):
-        return visitor.visit_rw(self)
+        return getattr(visitor, 'visit_{}'.format(self.name))(self)
 
 
 class LocalPath(VolumeType, MappingConstruct):
@@ -150,7 +140,7 @@ class LocalPath(VolumeType, MappingConstruct):
         ('mode', 'mode'),
     ])
 
-    def __init__(self, from_: str, to: str, mode: ModeType=RO):
+    def __init__(self, from_: str, to: str, mode: Mode=Mode.RO):
         self.from_ = from_
         self.to = to
         self.mode = mode
@@ -167,7 +157,7 @@ class NamedVolume(VolumeType, MappingConstruct):
         ('mode', 'mode'),
     ])
 
-    def __init__(self, name: str, to: str, mode: ModeType = RO):
+    def __init__(self, name: str, to: str, mode: Mode=Mode.RO):
         self.name = name
         self.to = to
         self.mode = mode

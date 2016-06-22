@@ -128,10 +128,10 @@ class _VolumeBinds:
     def visit(self, obj):
         return obj.accept(self)
 
-    def visit_ro(self, obj):
+    def visit_RO(self, obj):
         return 'ro'
 
-    def visit_rw(self, obj):
+    def visit_RW(self, obj):
         return 'rw'
 
     def visit_localpath(self, obj):

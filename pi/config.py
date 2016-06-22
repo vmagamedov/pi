@@ -13,6 +13,11 @@ class Loader(yaml_loader.SafeLoader):
     def register(cls, type_):
         cls.add_constructor(type_.__tag__, type_.construct)
 
+    @classmethod
+    def register_enum(cls, enum):
+        for enum_value in enum:
+            cls.add_constructor(enum_value.value, enum.construct)
+
 
 Loader.register(types.Meta)
 Loader.register(types.Image)
@@ -23,11 +28,10 @@ Loader.register(types.Argument)
 Loader.register(types.Option)
 Loader.register(types.ShellCommand)
 Loader.register(types.SubCommand)
-Loader.register(types.RO)
-Loader.register(types.RW)
 Loader.register(types.LocalPath)
 Loader.register(types.NamedVolume)
 Loader.register(types.Expose)
+Loader.register_enum(types.Mode)
 
 
 def read_config():
