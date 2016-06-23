@@ -46,14 +46,19 @@ def echo_build_progress(client, output):
     try:
         for line in output:
             log.debug(line)
-            status = json.loads(line.decode('utf-8'))
-            if 'stream' in status:
-                sys.stdout.write(status['stream'])
-                match = re.search(u'Running in ([0-9a-f]+)', status['stream'])
-                if match:
-                    latest_container = match.group(1)
-            elif 'error' in status:
-                sys.stdout.write(status['error'])
+            # FIXME: There is a bug in docker or docker-py: possibility
+            # of more than one chunks in one line.
+            chunks = line.decode('utf-8').splitlines()
+            for chunk in chunks:
+                status = json.loads(chunk)
+                if 'stream' in status:
+                    sys.stdout.write(status['stream'])
+                    match = re.search(u'Running in ([0-9a-f]+)',
+                                      status['stream'])
+                    if match:
+                        latest_container = match.group(1)
+                elif 'error' in status:
+                    sys.stdout.write(status['error'])
     except BaseException as original_exc:
         try:
             if latest_container is not None:
