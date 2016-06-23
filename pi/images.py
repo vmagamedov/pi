@@ -25,9 +25,9 @@ class Builder(object):
         return obj.accept(self)
 
     def visit_dockerfile(self, obj):
-        self.ctx.obj.image_build_dockerfile(self.layer.docker_image(),
-                                            obj.file_name,
-                                            echo_build_progress)
+        return self.ctx.obj.image_build_dockerfile(self.layer.docker_image(),
+                                                   obj.file_name,
+                                                   echo_build_progress)
 
 
 def _build_image(ctx, *, name):
@@ -35,8 +35,9 @@ def _build_image(ctx, *, name):
     for layer in layers:
         docker_image = layer.docker_image()
         if not ctx.obj.layer_exists(docker_image):
-            if not ctx.obj.maybe_pull(docker_image, echo_download_progress):
-                Builder(layer, ctx).visit(layer.image.provision_with)
+            if not ctx.obj.image_pull(docker_image, echo_download_progress):
+                if not Builder(layer, ctx).visit(layer.image.provision_with):
+                    ctx.exit(1)
         else:
             click.echo('Already exists: {}'
                        .format(docker_image.name))
@@ -53,6 +54,32 @@ def image_list(ctx):
             click.echo(pretty('\u2714 {_green}{}{_r}: {}', name, image_name))
         else:
             click.echo(pretty('\u2717 {_red}{}{_r}: {}', name, image_name))
+
+
+@click.command('pull')
+@click.argument('name')
+@click.pass_context
+def image_pull(ctx, name):
+    if name in ctx.obj.layers:
+        image = ctx.obj.layers[name].docker_image()
+    else:
+        image = DockerImage(name)
+    if not ctx.obj.image_pull(image, echo_download_progress):
+        click.echo('Unable to pull image {}'.format(image.name))
+        ctx.exit(1)
+
+
+@click.command('push')
+@click.argument('name')
+@click.pass_context
+def image_push(ctx, name):
+    if name in ctx.obj.layers:
+        image = ctx.obj.layers[name].docker_image()
+    else:
+        image = DockerImage(name)
+    if not ctx.obj.image_push(image, echo_download_progress):
+        click.echo('Unable to push image {}'.format(image.name))
+        ctx.exit(1)
 
 
 @click.command('shell')
@@ -81,6 +108,8 @@ def create_images_cli(layers):
     image_group.add_command(build_group)
 
     image_group.add_command(image_list)
+    image_group.add_command(image_pull)
+    image_group.add_command(image_push)
     image_group.add_command(image_shell)
 
     cli.add_command(image_group)

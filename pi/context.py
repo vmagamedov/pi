@@ -40,7 +40,7 @@ class Context:
         else:
             return True
 
-    def maybe_pull(self, image, printer):
+    def image_pull(self, image, printer):
         from .client import APIError
 
         try:
@@ -50,11 +50,16 @@ class Context:
                 return False
             raise
         else:
-            printer(output)
-            return True
+            # NOTE: `printer` is also responsible in detecting errors
+            return printer(output)
+
+    def image_push(self, image, printer):
+        output = self.client.push(image.name, stream=True)
+        # NOTE: `printer` is also responsible in detecting errors
+        return printer(output)
 
     def image_build_dockerfile(self, image, file_name, printer):
         with open(file_name, 'rb') as f:
             output = self.client.build(tag=image.name, fileobj=f,
                                        rm=True, stream=True)
-            printer(self.client, output)
+            return printer(self.client, output)
