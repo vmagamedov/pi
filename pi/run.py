@@ -86,6 +86,8 @@ def input(self, fd, dst):
     try:
         while True:
             data = yield from q.get()
+            if not data:
+                break
             yield from send(dst, BYTES, data)
     finally:
         self.loop.remove_reader(fd)
