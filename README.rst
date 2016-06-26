@@ -3,7 +3,7 @@ in your project [#f1]_, improve your development environment by using
 **containerization** and improve your development experience by providing
 nice command-line interface for your projects.
 
-:Status: *under active development*
+:Status: *proof of concept*
 
 .. [#f1] when it isn't used as a build system, but as utility to define
          repetitive tasks, like `make test`.
