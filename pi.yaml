@@ -33,4 +33,5 @@
   name: app.env
   from: env
   repository: reg.local/app.env
-  provision-with: !Dockerfile Dockerfile.app.env
+  provision-with: !AnsibleTasks
+    - file: path=/foo.ini state=touch

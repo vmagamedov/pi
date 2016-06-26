@@ -19,25 +19,27 @@ class Builder(object):
 
     def __init__(self, layer, ctx):
         self.layer = layer
+        self.from_ = layer.parent.docker_image() if layer.parent else None
         self.ctx = ctx
 
     def visit(self, obj):
         return obj.accept(self)
 
     def visit_dockerfile(self, obj):
-        if self.layer.parent:
-            return self.ctx.obj.image_build_dockerfile_from(
-                self.layer.docker_image(),
-                obj.file_name,
-                self.layer.parent.docker_image(),
-                echo_build_progress,
-            )
-        else:
-            return self.ctx.obj.image_build_dockerfile(
-                self.layer.docker_image(),
-                obj.file_name,
-                echo_build_progress,
-            )
+        return self.ctx.obj.image_build_dockerfile(
+            self.layer.docker_image(),
+            obj.file_name,
+            self.from_,
+            echo_build_progress,
+        )
+
+    def visit_ansibletasks(self, obj):
+        return self.ctx.obj.image_build_ansibletasks(
+            self.layer.image.repository,
+            self.layer.version(),
+            obj.tasks,
+            self.from_,
+        )
 
 
 def _build_image(ctx, *, name):

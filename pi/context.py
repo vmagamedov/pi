@@ -1,5 +1,7 @@
 import io
 import re
+import subprocess
+from tempfile import NamedTemporaryFile
 
 from .utils import cached_property
 from .types import DockerImage
@@ -7,6 +9,13 @@ from .types import DockerImage
 
 ANCESTOR_RE = re.compile(b'^FROM[ ]+\{\{ancestor\}\}',
                          flags=re.MULTILINE)
+
+# FIXME: ubuntu-specific python location
+ANSIBLE_INVENTORY = (
+    '{host} ansible_connection=docker '
+    'ansible_user=root '
+    'ansible_python_interpreter=/usr/bin/python2.7'
+)
 
 
 class Context:
@@ -65,20 +74,44 @@ class Context:
         # NOTE: `printer` is also responsible in detecting errors
         return printer(output)
 
-    def image_build_dockerfile(self, image, file_name, printer):
-        with open(file_name, 'rb') as f:
-            output = self.client.build(tag=image.name, fileobj=f,
-                                       rm=True, stream=True)
-            return printer(self.client, output)
-
-    def image_build_dockerfile_from(self, image, file_name, from_, printer):
+    def image_build_dockerfile(self, image, file_name, from_, printer):
         with open(file_name, 'rb') as f:
             docker_file = f.read()
 
-        from_stmt = 'FROM {}'.format(from_.name).encode('ascii')
-        docker_file = ANCESTOR_RE.sub(from_stmt, docker_file)
+        if from_ is not None:
+            from_stmt = 'FROM {}'.format(from_.name).encode('ascii')
+            docker_file = ANCESTOR_RE.sub(from_stmt, docker_file)
 
         output = self.client.build(tag=image.name,
                                    fileobj=io.BytesIO(docker_file),
                                    rm=True, stream=True)
         return printer(self.client, output)
+
+    def image_build_ansibletasks(self, repository, version, tasks, from_):
+        import yaml
+
+        c = self.client.create_container(from_.name, '/bin/sh',
+                                         detach=True, tty=True)
+
+        c_id = c['Id']
+        plays = [{'hosts': c_id, 'tasks': tasks}]
+        try:
+            self.client.start(c)
+            with NamedTemporaryFile('w+', encoding='utf-8') as pb_file, \
+                    NamedTemporaryFile('w+', encoding='ascii') as inv_file:
+                pb_file.write(yaml.dump(plays))
+                pb_file.flush()
+
+                inv_file.write(ANSIBLE_INVENTORY.format(host=c_id))
+                inv_file.flush()
+
+                exit_code = subprocess.call(['ansible-playbook',
+                                             '-i', inv_file.name,
+                                             pb_file.name])
+                if exit_code:
+                    return False
+
+                self.client.commit(c, repository, version)
+                return True
+        finally:
+            self.client.remove_container(c, v=True, force=True)
