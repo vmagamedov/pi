@@ -33,4 +33,4 @@
   name: app.env
   from: env
   repository: reg.local/app.env
-  provision-with: !AnsibleTasks [1, 2, 3]
+  provision-with: !Dockerfile Dockerfile.app.env

@@ -1,5 +1,12 @@
+import io
+import re
+
 from .utils import cached_property
 from .types import DockerImage
+
+
+ANCESTOR_RE = re.compile(b'^FROM[ ]+\{\{ancestor\}\}',
+                         flags=re.MULTILINE)
 
 
 class Context:
@@ -28,7 +35,7 @@ class Context:
             parent = path[-1].parent
         return tuple(reversed(path))
 
-    def layer_exists(self, image):
+    def image_exists(self, image):
         from .client import APIError
 
         try:
@@ -63,3 +70,15 @@ class Context:
             output = self.client.build(tag=image.name, fileobj=f,
                                        rm=True, stream=True)
             return printer(self.client, output)
+
+    def image_build_dockerfile_from(self, image, file_name, from_, printer):
+        with open(file_name, 'rb') as f:
+            docker_file = f.read()
+
+        from_stmt = 'FROM {}'.format(from_.name).encode('ascii')
+        docker_file = ANCESTOR_RE.sub(from_stmt, docker_file)
+
+        output = self.client.build(tag=image.name,
+                                   fileobj=io.BytesIO(docker_file),
+                                   rm=True, stream=True)
+        return printer(self.client, output)

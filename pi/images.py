@@ -25,16 +25,26 @@ class Builder(object):
         return obj.accept(self)
 
     def visit_dockerfile(self, obj):
-        return self.ctx.obj.image_build_dockerfile(self.layer.docker_image(),
-                                                   obj.file_name,
-                                                   echo_build_progress)
+        if self.layer.parent:
+            return self.ctx.obj.image_build_dockerfile_from(
+                self.layer.docker_image(),
+                obj.file_name,
+                self.layer.parent.docker_image(),
+                echo_build_progress,
+            )
+        else:
+            return self.ctx.obj.image_build_dockerfile(
+                self.layer.docker_image(),
+                obj.file_name,
+                echo_build_progress,
+            )
 
 
 def _build_image(ctx, *, name):
     layers = ctx.obj.layers_path(name)
     for layer in layers:
         docker_image = layer.docker_image()
-        if not ctx.obj.layer_exists(docker_image):
+        if not ctx.obj.image_exists(docker_image):
             if not ctx.obj.image_pull(docker_image, echo_download_progress):
                 if not Builder(layer, ctx).visit(layer.image.provision_with):
                     ctx.exit(1)
