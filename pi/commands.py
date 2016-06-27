@@ -4,7 +4,7 @@ from ._requires import click
 from ._requires import jinja2
 
 from .run import run
-from .types import CommandType
+from .types import CommandType, LocalPath, Mode
 from .actors import init
 from .console import config_tty
 
@@ -57,10 +57,10 @@ def render_template(template, params):
 
 
 def execute(client, image, command, *, volumes=None, ports=None,
-            raw_input=False):
+            work_dir=None, raw_input=False):
     with config_tty(raw_input) as fd:
         return init(run, client, fd, image, command,
-                    volumes=volumes, ports=ports)
+                    volumes=volumes, ports=ports, work_dir=work_dir)
 
 
 class _ParameterCreator:
@@ -85,6 +85,18 @@ class _CommandCreator:
     def __init__(self, name):
         self.name = name
 
+    def _get_volumes(self, command):
+        if command.volumes is not None:
+            return command.volumes
+        else:
+            return [LocalPath('.', '.', Mode.RW)]
+
+    def _get_work_dir(self, command):
+        if command.volumes is None:
+            return '.'
+        else:
+            return '/'
+
     def visit(self, command):
         return command.accept(self)
 
@@ -99,8 +111,9 @@ class _CommandCreator:
             code = render_template(command.shell, kw)
             exit_code = execute(ctx.obj.client, docker_image,
                                 ['sh', '-c', code],
-                                volumes=command.volumes,
+                                volumes=self._get_volumes(command),
                                 ports=command.ports,
+                                work_dir=self._get_work_dir(command),
                                 raw_input=command.raw_input)
             ctx.exit(exit_code)
 
@@ -122,8 +135,9 @@ class _CommandCreator:
             docker_image = ctx.obj.require_image(command.image)
             exit_code = execute(ctx.obj.client, docker_image,
                                 call + args,
-                                volumes=command.volumes,
+                                volumes=self._get_volumes(command),
                                 ports=command.ports,
+                                work_dir=self._get_work_dir(command),
                                 raw_input=command.raw_input)
             ctx.exit(exit_code)
 

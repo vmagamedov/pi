@@ -20,10 +20,8 @@
   image: !DockerImage ubuntu:xenial
   call: /bin/bash
   raw-input: true
-  volumes:
-  - !LocalPath { from: ".", to: "/dst", mode: !RW }
   ports:
-  - !Expose { port: 8000, as: 8080 }
+    - !Expose { port: 8000, as: 8080 }
 
 - !Image
   name: env

@@ -250,8 +250,8 @@ class ShellCommand(CommandType, MappingConstruct):
         self.image = image
         self.params = params
         self.shell = shell
-        self.volumes = volumes or []
-        self.ports = ports or []
+        self.volumes = volumes
+        self.ports = ports
         self.raw_input = raw_input
         self.description = description
 
@@ -280,8 +280,8 @@ class SubCommand(CommandType, MappingConstruct):
         self.name = name
         self.image = image
         self.call = call
-        self.volumes = volumes or []
-        self.ports = ports or []
+        self.volumes = volumes
+        self.ports = ports
         self.raw_input = raw_input
         self.description = description
 

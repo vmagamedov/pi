@@ -123,9 +123,13 @@ def socket_writer(self, sock):
 class _VolumeBinds:
 
     @classmethod
-    def translate(cls, volumes):
+    def translate_binds(cls, volumes):
         self = cls()
         return dict(self.visit(vol) for vol in volumes)
+
+    @classmethod
+    def translate_volumes(cls, volumes):
+        return [os.path.abspath(vol.to) for vol in volumes]
 
     def visit(self, obj):
         return obj.accept(self)
@@ -138,13 +142,15 @@ class _VolumeBinds:
 
     def visit_localpath(self, obj):
         from_ = os.path.abspath(obj.from_)
+        to = os.path.abspath(obj.to)
         # FIXME: implement proper errors reporting
         assert os.path.exists(from_),\
             'Local path does not exists: {}'.format(from_)
-        return from_, {'bind': obj.to, 'mode': self.visit(obj.mode)}
+        return from_, {'bind': to, 'mode': self.visit(obj.mode)}
 
     def visit_namedvolume(self, obj):
-        return obj.name, {'bind': obj.to, 'mode': self.visit(obj.mode)}
+        to = os.path.abspath(obj.to)
+        return obj.name, {'bind': to, 'mode': self.visit(obj.mode)}
 
 
 def _port_binds(ports):
@@ -154,15 +160,17 @@ def _port_binds(ports):
 
 
 def run(self, client, input_fd, image, command, *,
-        volumes=None, ports=None,
+        volumes=None, ports=None, work_dir=None,
         wait_exit=3):
     volumes = volumes or []
-    container_volumes = [v.to for v in volumes]
-    container_volume_binds = _VolumeBinds.translate(volumes)
+    container_volumes = _VolumeBinds.translate_volumes(volumes)
+    container_volume_binds = _VolumeBinds.translate_binds(volumes)
 
     ports = ports or []
     container_ports = [(e.port, e.proto) for e in ports]
     container_port_binds = _port_binds(ports)
+
+    work_dir = os.path.abspath(work_dir) if work_dir is not None else None
 
     try:
         c = yield from self.exec(client.create_container,
@@ -171,7 +179,8 @@ def run(self, client, input_fd, image, command, *,
                                  stdin_open=True,
                                  tty=True,
                                  ports=container_ports,
-                                 volumes=container_volumes)
+                                 volumes=container_volumes,
+                                 working_dir=work_dir)
     except APIError as e:
         click.echo(e.explanation)
         return
