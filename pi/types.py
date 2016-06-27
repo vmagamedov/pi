@@ -236,6 +236,7 @@ class ShellCommand(CommandType, MappingConstruct):
         ('shell', 'shell'),
         ('volumes', 'volumes'),
         ('ports', 'ports'),
+        ('raw-input', 'raw_input'),
         ('description', 'description'),
     ])
 
@@ -243,6 +244,7 @@ class ShellCommand(CommandType, MappingConstruct):
                  params: Optional[Sequence[ParameterType]]=None,
                  volumes: Optional[Sequence[VolumeType]]=None,
                  ports: Optional[Sequence[Expose]]=None,
+                 raw_input: Optional[bool]=False,
                  description: Optional[str]=None):
         self.name = name
         self.image = image
@@ -250,6 +252,7 @@ class ShellCommand(CommandType, MappingConstruct):
         self.shell = shell
         self.volumes = volumes or []
         self.ports = ports or []
+        self.raw_input = raw_input
         self.description = description
 
     def accept(self, visitor):
@@ -264,6 +267,7 @@ class SubCommand(CommandType, MappingConstruct):
         ('call', 'call'),
         ('volumes', 'volumes'),
         ('ports', 'ports'),
+        ('raw-input', 'raw_input'),
         ('description', 'description'),
     ])
 
@@ -271,12 +275,14 @@ class SubCommand(CommandType, MappingConstruct):
                  call: Union[str, Sequence[str]],
                  volumes: Optional[Sequence[VolumeType]]=None,
                  ports: Optional[Sequence[Expose]]=None,
+                 raw_input: Optional[bool]=False,
                  description: Optional[str]=None):
         self.name = name
         self.image = image
         self.call = call
         self.volumes = volumes or []
         self.ports = ports or []
+        self.raw_input = raw_input
         self.description = description
 
     def accept(self, visitor):

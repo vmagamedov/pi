@@ -9,7 +9,7 @@ from .layers import Layer
 from .client import echo_download_progress, echo_build_progress
 from .actors import init
 from .console import pretty
-from .console import raw_stdin
+from .console import config_tty
 
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
@@ -102,7 +102,7 @@ def image_shell(ctx, name):
         image = ctx.obj.layers[name].docker_image()
     else:
         image = DockerImage(name)
-    with raw_stdin() as fd:
+    with config_tty(raw_input=True) as fd:
         ctx.exit(init(run, ctx.obj.client, fd, image, '/bin/bash'))
 
 

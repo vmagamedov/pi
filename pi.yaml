@@ -19,6 +19,7 @@
   name: shell
   image: !DockerImage ubuntu:xenial
   call: /bin/bash
+  raw-input: true
   volumes:
   - !LocalPath { from: ".", to: "/dst", mode: !RW }
   ports:

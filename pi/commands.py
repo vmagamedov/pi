@@ -6,7 +6,7 @@ from ._requires import jinja2
 from .run import run
 from .types import CommandType
 from .actors import init
-from .console import raw_stdin
+from .console import config_tty
 
 
 class ProxyCommand(click.MultiCommand):
@@ -56,8 +56,9 @@ def render_template(template, params):
     return t.render(params)
 
 
-def execute(client, image, command, *, volumes=None, ports=None):
-    with raw_stdin() as fd:
+def execute(client, image, command, *, volumes=None, ports=None,
+            raw_input=False):
+    with config_tty(raw_input) as fd:
         return init(run, client, fd, image, command,
                     volumes=volumes, ports=ports)
 
@@ -99,7 +100,8 @@ class _CommandCreator:
             exit_code = execute(ctx.obj.client, docker_image,
                                 ['sh', '-c', code],
                                 volumes=command.volumes,
-                                ports=command.ports)
+                                ports=command.ports,
+                                raw_input=command.raw_input)
             ctx.exit(exit_code)
 
         short_help = None
@@ -121,7 +123,8 @@ class _CommandCreator:
             exit_code = execute(ctx.obj.client, docker_image,
                                 call + args,
                                 volumes=command.volumes,
-                                ports=command.ports)
+                                ports=command.ports,
+                                raw_input=command.raw_input)
             ctx.exit(exit_code)
 
         short_help = None
