@@ -88,7 +88,7 @@ class Context:
         return printer(self.client, output)
 
     def image_build_ansibletasks(self, repository, version, tasks, from_):
-        import yaml
+        from ._requires import yaml
 
         c = self.client.create_container(from_.name, '/bin/sh',
                                          detach=True, tty=True)
