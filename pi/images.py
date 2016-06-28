@@ -19,8 +19,12 @@ class Builder(object):
 
     def __init__(self, layer, ctx):
         self.layer = layer
-        self.from_ = layer.parent.docker_image() if layer.parent else None
         self.ctx = ctx
+        if layer.parent:
+            from_ = layer.parent.docker_image()
+        else:
+            from_ = layer.image.from_
+        self.from_ = from_
 
     def visit(self, obj):
         return obj.accept(self)
