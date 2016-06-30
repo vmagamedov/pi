@@ -3,10 +3,15 @@ import shlex
 from ._requires import click
 from ._requires import jinja2
 
+from ._res import DUMB_INIT_LOCAL_PATH
+
 from .run import run
 from .types import CommandType, LocalPath, Mode
 from .actors import init
 from .console import config_tty
+
+
+DUMB_INIT_REMOTE_PATH = '/bin/pi-dumb-init'
 
 
 class ProxyCommand(click.MultiCommand):
@@ -108,10 +113,16 @@ class _CommandCreator:
         @click.pass_context
         def cb(ctx, **kw):
             docker_image = ctx.obj.require_image(command.image)
-            code = render_template(command.shell, kw)
-            exit_code = execute(ctx.obj.client, docker_image,
-                                ['sh', '-c', code],
-                                volumes=self._get_volumes(command),
+
+            volumes = self._get_volumes(command)
+            volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
+                                     DUMB_INIT_REMOTE_PATH))
+
+            cmd = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
+                   render_template(command.shell, kw)]
+
+            exit_code = execute(ctx.obj.client, docker_image, cmd,
+                                volumes=volumes,
                                 ports=command.ports,
                                 work_dir=self._get_work_dir(command),
                                 raw_input=command.raw_input)
