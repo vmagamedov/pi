@@ -4,7 +4,7 @@ from functools import partial
 from ._requires import click
 
 from .run import run
-from .types import DockerImage, Image
+from .types import DockerImage, Image, LocalPath, Mode
 from .layers import Layer
 from .client import echo_download_progress, echo_build_progress
 from .actors import init
@@ -100,14 +100,35 @@ def image_push(ctx, name):
 
 @click.command('shell')
 @click.argument('name')
+@click.option('-v', '--volume', multiple=True,
+              help='Mount volume: "/host" or "/host:/container" or '
+                   '"/host:/container:rw"')
 @click.pass_context
-def image_shell(ctx, name):
+def image_shell(ctx, name, volume):
     if name in ctx.obj.layers:
         image = ctx.obj.layers[name].docker_image()
     else:
         image = DockerImage(name)
+
+    volumes = []
+    for v in volume:
+        parts = v.split(':')
+        if len(parts) == 1:
+            from_, = to, = parts
+            mode = Mode.RO
+        elif len(parts) == 2:
+            from_, to = parts
+            mode = Mode.RO
+        elif len(parts) == 3:
+            from_, to, mode_raw = parts
+            mode = {'ro': Mode.RO, 'rw': Mode.RW}[mode_raw]
+        else:
+            raise TypeError('More values than expected: {!r}'.format(v))
+        volumes.append(LocalPath(from_, to, mode))
+
     with config_tty(raw_input=True) as fd:
-        ctx.exit(init(run, ctx.obj.client, fd, image, '/bin/bash'))
+        ctx.exit(init(run, ctx.obj.client, fd, image, '/bin/bash',
+                      volumes=volumes))
 
 
 def create_images_cli(layers):
