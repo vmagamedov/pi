@@ -127,7 +127,7 @@ def image_shell(ctx, name, volume):
         volumes.append(LocalPath(from_, to, mode))
 
     with config_tty(raw_input=True) as fd:
-        ctx.exit(init(run, ctx.obj.client, fd, image, '/bin/bash',
+        ctx.exit(init(run, ctx.obj.client, fd, image, '/bin/sh',
                       volumes=volumes))
 
 

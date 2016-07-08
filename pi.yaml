@@ -30,7 +30,7 @@
 
 - !Image
   name: app.env
-  from: env
+  from: !DockerImage ubuntu:xenial
   repository: reg.local/app.env
   provision-with: !AnsibleTasks
     - file: path=/foo.ini state=touch

@@ -3,7 +3,7 @@ import re
 import subprocess
 from tempfile import NamedTemporaryFile
 
-from ._requires import click
+from ._res import PYTHON_LOCAL_PATH
 
 from .utils import cached_property
 from .types import DockerImage
@@ -18,20 +18,7 @@ ANSIBLE_INVENTORY = (
     'ansible_python_interpreter={python_path}'
 )
 
-
-def _get_python_path(client, image):
-    c = client.create_container(image, 'which python2')
-    client.start(c)
-    client.wait(c, 3)
-    bin_output = client.logs(c)
-    try:
-        output = bin_output.decode('utf-8')
-    except UnicodeDecodeError:
-        return
-    if not output.startswith('/'):
-        return
-    path, = output.splitlines()
-    return path
+PYTHON_REMOTE_PATH = '/pi-python'
 
 
 class Context:
@@ -106,23 +93,16 @@ class Context:
     def image_build_ansibletasks(self, repository, version, tasks, from_):
         from ._requires import yaml
 
-        python_path = _get_python_path(self.client, from_.name)
-        if python_path is None:
-            click.echo('Can\'t find location of the Python executable '
-                       'in the base image. Make sure that Python 2.x is '
-                       'installed there.')
-            click.echo('For example you can check this by calling '
-                       '`which python2` inside the container, '
-                       'launched using image "{}"'.format(from_.name))
-            return False
-
         c = self.client.create_container(from_.name, '/bin/sh',
-                                         detach=True, tty=True)
+                                         detach=True, tty=True,
+                                         volumes=[PYTHON_REMOTE_PATH])
 
         c_id = c['Id']
         plays = [{'hosts': c_id, 'tasks': tasks}]
         try:
-            self.client.start(c)
+            self.client.start(c, binds={
+                PYTHON_LOCAL_PATH: {'bind': PYTHON_REMOTE_PATH, 'mode': 'ro'}
+            })
             with NamedTemporaryFile('w+', encoding='utf-8') as pb_file, \
                     NamedTemporaryFile('w+', encoding='ascii') as inv_file:
                 pb_file.write(yaml.dump(plays))
@@ -130,7 +110,7 @@ class Context:
 
                 inv_file.write(ANSIBLE_INVENTORY.format(
                     host=c_id,
-                    python_path=python_path,
+                    python_path='{}/python'.format(PYTHON_REMOTE_PATH),
                 ))
                 inv_file.flush()
 
