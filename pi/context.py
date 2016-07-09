@@ -3,7 +3,7 @@ import re
 import subprocess
 from tempfile import NamedTemporaryFile
 
-from ._res import PYTHON_LOCAL_PATH
+from ._res import LOCAL_PYTHON_BIN, LOCAL_PYTHON_LIB
 
 from .utils import cached_property
 from .types import DockerImage
@@ -18,7 +18,8 @@ ANSIBLE_INVENTORY = (
     'ansible_python_interpreter={python_path}'
 )
 
-PYTHON_REMOTE_PATH = '/pi-python'
+REMOTE_PYTHON_BIN = '/.pi-python/bin/python2.7'
+REMOTE_PYTHON_LIB = '/.pi-python/lib/python27.zip'
 
 
 class Context:
@@ -95,13 +96,15 @@ class Context:
 
         c = self.client.create_container(from_.name, '/bin/sh',
                                          detach=True, tty=True,
-                                         volumes=[PYTHON_REMOTE_PATH])
+                                         volumes=[REMOTE_PYTHON_BIN,
+                                                  REMOTE_PYTHON_LIB])
 
         c_id = c['Id']
         plays = [{'hosts': c_id, 'tasks': tasks}]
         try:
             self.client.start(c, binds={
-                PYTHON_LOCAL_PATH: {'bind': PYTHON_REMOTE_PATH, 'mode': 'ro'}
+                LOCAL_PYTHON_BIN: {'bind': REMOTE_PYTHON_BIN, 'mode': 'ro'},
+                LOCAL_PYTHON_LIB: {'bind': REMOTE_PYTHON_LIB, 'mode': 'ro'},
             })
             with NamedTemporaryFile('w+', encoding='utf-8') as pb_file, \
                     NamedTemporaryFile('w+', encoding='ascii') as inv_file:
@@ -110,7 +113,7 @@ class Context:
 
                 inv_file.write(ANSIBLE_INVENTORY.format(
                     host=c_id,
-                    python_path='{}/python'.format(PYTHON_REMOTE_PATH),
+                    python_path=REMOTE_PYTHON_BIN,
                 ))
                 inv_file.flush()
 

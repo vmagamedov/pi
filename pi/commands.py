@@ -11,7 +11,7 @@ from .actors import init
 from .console import config_tty
 
 
-DUMB_INIT_REMOTE_PATH = '/bin/pi-dumb-init'
+DUMB_INIT_REMOTE_PATH = '/.pi-dumb-init'
 
 
 class ProxyCommand(click.MultiCommand):
