@@ -19,3 +19,5 @@ python:
 	docker run -it --rm -v $(PWD)/scripts:/in:ro -v $(PWD)/pi/_res/python:/out alpine:3.4 sh /in/build.sh
 	cp ./scripts/python.sh ./pi/_res/python/python
 	chmod +x ./pi/_res/python/python
+
+all: requires dumb-init python

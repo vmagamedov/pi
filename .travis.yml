@@ -1,0 +1,27 @@
+sudo: required
+services:
+  - docker
+
+language: python
+python:
+  - 3.4
+
+before_install:
+  - docker pull alpine:3.4
+
+script:
+  - make all
+
+before_deploy:
+  - python setup.py sdist
+  - export PACKAGE=$(ls dist/Pi-*.tar.gz)
+
+deploy:
+  provider: releases
+  api_key:
+    secure: T9fnCGzZzKYiCrll0qd4lcYFTZqTZtt4NK7SE01cQUup0j0fMaUrtfrxKX6QBgGBhoNZUzZAd20r3CI42KCNTOcGfoC3aqZl0iDJLAyQAa+7qKc+jo8rIGPdhH81l42TnexnLttInPlGtnyGl1chDG1vGixVpKNxjiYck/cMGo50nFOwATLVfpidLaLERMJFVU5a/HFl7XKhegcf6Kgy2g/sZLYEs0pU/qIjueC2dtMC8HqqfVZMWfd/8t/wfUnO2W06OTaJptKPo5k+U6bKPCOw2u8TnJ3q8laDcRN4nOQqIdKW20UO6o07oXJmrFmMI7a5xB/Iu9pb60FffIE34+J0YXwceC7VXZVDR2GIsGl9Ag2J7fFm40tBSJ2+sREGKjAJj7tnSzjvkpcKC1aRzzBQoupimV88Q4HQWk3AykVrJLu5wBbiyPgLcuOkDbcznr/eLsNA5JmpHEeJP1a7fm3c4+FNKOFkeZkpGA2yjpeubyC0UYLkzelxdffxB0bDmyd7mkaHXz/aDiHRs341p3qwCIV99HyyW8rFDC4l2WgToZRdkG5ZjRJbAHLqpT5B/m92P3sR/FgOJQKrn5I73sBx3Z1KhwVNe7e9PXHMVCkcBuJ7LevxQW04NVrelPHRYv77AbhEVwAFzGHm3z+ciifESy4LmlKLxnxlxYLdyPE=
+  file: "${PACKAGE}"
+  skip_cleanup: true
+  on:
+    repo: vmagamedov/pi
+    tags: true
