@@ -12,7 +12,7 @@ _heapq _heapqmodule.c
 itertools itertoolsmodule.c
 strop stropmodule.c
 _functools _functoolsmodule.c
-_elementtree -I$(srcdir)/Modules/expat -DHAVE_EXPAT_CONFIG_H -DUSE_PYEXPAT_CAPI _elementtree.c # elementtree accelerator
+_elementtree -I$(srcdir)/Modules/expat -DHAVE_EXPAT_CONFIG_H -DUSE_PYEXPAT_CAPI _elementtree.c
 datetime datetimemodule.c
 _bisect _bisectmodule.c
 zlib zlibmodule.c -I$(prefix)/include -L$(exec_prefix)/lib -lz
