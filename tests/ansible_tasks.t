@@ -4,7 +4,7 @@ Configure:
   $ cat > pi.yaml << EOF
   > - !Image
   >    name: app.env
-  >    from: !DockerImage ubuntu:xenial
+  >    from: !DockerImage alpine:3.4
   >    repository: app.env
   >    provision-with: !AnsibleTasks
   >      - file: path=/foo.ini state=touch
@@ -16,10 +16,7 @@ Setup:
 
 Test:
 
-  $ pi image build app.env
-  Pulling repository docker.io/library/app.env
-  Error: image library/app.env:773df759057a not found
-   (esc)
+  $ pi image build app.env | tail -n 11
   PLAY [*] * (glob)
    (esc)
   TASK [setup] *******************************************************************

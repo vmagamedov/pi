@@ -48,6 +48,14 @@ class Builder(object):
 
 def _build_image(ctx, *, name):
     layers = ctx.obj.layers_path(name)
+
+    # check if base image exists
+    base_image = layers[0].image.from_
+    if base_image is not None:
+        if not ctx.obj.image_exists(base_image):
+            if not ctx.obj.image_pull(base_image, echo_download_progress):
+                ctx.exit(1)
+
     for layer in layers:
         docker_image = layer.docker_image()
         if not ctx.obj.image_exists(docker_image):
