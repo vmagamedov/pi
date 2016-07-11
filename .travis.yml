@@ -5,6 +5,7 @@ services:
 language: python
 python:
   - 3.4
+  - 3.5
 
 before_install:
   - docker pull alpine:3.4

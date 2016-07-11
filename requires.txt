@@ -7,3 +7,4 @@ requests==2.10.0
 docker-py==1.8.1
 markupsafe==0.23
 websocket-client==0.37.0
+backports.ssl_match_hostname==3.5.0.1
