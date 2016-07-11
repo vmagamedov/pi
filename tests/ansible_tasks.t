@@ -16,7 +16,7 @@ Setup:
 
 Test:
 
-  $ python -m pi image build app.env
+  $ pi image build app.env
   Pulling repository docker.io/library/app.env
   Error: image library/app.env:773df759057a not found
    (esc)
