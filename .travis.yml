@@ -12,6 +12,10 @@ before_install:
 script:
   - make all
 
+cache:
+  directories:
+    - pi/_res/python
+
 before_deploy:
   - python setup.py sdist
   - export PACKAGE=$(ls dist/Pi-*.tar.gz)
