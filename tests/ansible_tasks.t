@@ -12,7 +12,7 @@ Configure:
 
 Setup:
 
-  $ docker rmi app.env:773df759057a > /dev/null || true
+  $ docker rmi app.env:773df759057a > /dev/null 2>&1 || true
 
 Test:
 
