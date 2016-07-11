@@ -8,9 +8,16 @@ python:
 
 before_install:
   - docker pull alpine:3.4
+  - sudo apt-add-repository -y ppa:ansible/ansible
+  - sudo apt-get update -q
+  - sudo apt-get install -y ansible
+
+install:
+  - pip install cram
 
 script:
   - make all
+  - cram tests
 
 cache:
   directories:
