@@ -11,7 +11,8 @@ before_install:
   - docker pull alpine:3.4
   - sudo apt-add-repository -y ppa:ansible/ansible
   - sudo apt-get update -q
-  - sudo apt-get install -y ansible docker-engine
+  - sudo apt-get install -y ansible
+  - sudo apt-get install -o Dpkg::Options::="--force-confnew" -y docker-engine
 
 install:
   - pip install cram
