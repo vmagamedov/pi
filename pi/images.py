@@ -1,10 +1,12 @@
-from itertools import chain
+from operator import attrgetter
 from functools import partial
+from collections import Counter
 
 from ._requires import click
 
 from .run import run
 from .types import DockerImage, Image, LocalPath, Mode
+from .utils import format_size
 from .layers import Layer
 from .client import echo_download_progress, echo_build_progress
 from .actors import init
@@ -70,14 +72,32 @@ def _build_image(ctx, *, name):
 @click.command('list')
 @click.pass_context
 def image_list(ctx):
-    images = ctx.obj.client.images()
-    tags = set(chain.from_iterable(i['RepoTags'] for i in images))
-    for name in sorted(ctx.obj.layers.keys()):
-        image_name = ctx.obj.layers[name].docker_image().name
-        if image_name in tags:
-            click.echo(pretty('\u2714 {_green}{}{_r}: {}', name, image_name))
+    from ._requires.tabulate import tabulate
+
+    available = set()
+    counts = Counter()
+    sizes = {}
+    for image in ctx.obj.client.images():
+        available.update(image['RepoTags'])
+        for repo_tag in image['RepoTags']:
+            repo, _ = repo_tag.split(':')
+            counts[repo] += 1
+            sizes[repo_tag] = image['VirtualSize']
+
+    rows = []
+    for layer in sorted(ctx.obj.layers.values(), key=attrgetter('name')):
+        image_name = layer.docker_image().name
+        if image_name in available:
+            pretty_name = pretty('\u2714 {_green}{}{_r}', layer.name)
         else:
-            click.echo(pretty('\u2717 {_red}{}{_r}: {}', name, image_name))
+            pretty_name = pretty('\u2717 {_red}{}{_r}', layer.name)
+        size = sizes.get(image_name, 0)
+        pretty_size = format_size(size) if size else None
+        count = counts.get(layer.image.repository, None)
+        rows.append([pretty_name, image_name, pretty_size, count])
+
+    click.echo(tabulate(rows, headers=['  Image name', 'Docker image',
+                                       'Size', 'Versions']))
 
 
 @click.command('pull')
