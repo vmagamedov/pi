@@ -85,22 +85,21 @@ class _ParameterCreator:
                             default=param.default)
 
 
+def get_volumes(volumes):
+    if volumes is not None:
+        return volumes
+    else:
+        return [LocalPath('.', '.', Mode.RW)]
+
+
+def get_work_dir(volumes):
+    return '.' if volumes is None else '/'
+
+
 class _CommandCreator:
 
     def __init__(self, name):
         self.name = name
-
-    def _get_volumes(self, command):
-        if command.volumes is not None:
-            return command.volumes
-        else:
-            return [LocalPath('.', '.', Mode.RW)]
-
-    def _get_work_dir(self, command):
-        if command.volumes is None:
-            return '.'
-        else:
-            return '/'
 
     def visit(self, command):
         return command.accept(self)
@@ -114,7 +113,7 @@ class _CommandCreator:
         def cb(ctx, **kw):
             docker_image = ctx.obj.require_image(command.image)
 
-            volumes = self._get_volumes(command)
+            volumes = get_volumes(command.volumes)
             volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
                                      DUMB_INIT_REMOTE_PATH))
 
@@ -124,7 +123,7 @@ class _CommandCreator:
             exit_code = execute(ctx.obj.client, docker_image, cmd,
                                 volumes=volumes,
                                 ports=command.ports,
-                                work_dir=self._get_work_dir(command),
+                                work_dir=get_work_dir(command.volumes),
                                 raw_input=command.raw_input)
             ctx.exit(exit_code)
 
@@ -146,9 +145,9 @@ class _CommandCreator:
             docker_image = ctx.obj.require_image(command.image)
             exit_code = execute(ctx.obj.client, docker_image,
                                 call + args,
-                                volumes=self._get_volumes(command),
+                                volumes=get_volumes(command.volumes),
                                 ports=command.ports,
-                                work_dir=self._get_work_dir(command),
+                                work_dir=get_work_dir(command.volumes),
                                 raw_input=command.raw_input)
             ctx.exit(exit_code)
 

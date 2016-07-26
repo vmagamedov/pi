@@ -50,8 +50,9 @@ def _pi_python_tar():
 
 class Context:
 
-    def __init__(self, layers):
+    def __init__(self, layers, services):
         self.layers = {l.name: l for l in layers}
+        self.services = {s.name: s for s in services}
 
     @cached_property
     def client(self):

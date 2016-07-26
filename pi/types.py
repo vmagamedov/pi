@@ -287,3 +287,27 @@ class SubCommand(CommandType, MappingConstruct):
 
     def accept(self, visitor):
         return visitor.visit_subcommand(self)
+
+
+class Service(MappingConstruct):
+    __tag__ = '!Service'
+    __params__ = ImmutableDict([
+        ('name', 'name'),
+        ('image', 'image'),
+        ('volumes', 'volumes'),
+        ('ports', 'ports'),
+        ('description', 'description'),
+    ])
+
+    def __init__(self, name: str, image: Union[DockerImage, str],
+                 volumes: Optional[Sequence[VolumeType]]=None,
+                 ports: Optional[Sequence[Expose]]=None,
+                 description: Optional[str]=None):
+        self.name = name
+        self.image = image
+        self.volumes = volumes
+        self.ports = ports
+        self.description = description
+
+    def accept(self, visitor):
+        return visitor.visit_service(self)

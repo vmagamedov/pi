@@ -23,6 +23,12 @@
   ports:
     - !Expose { port: 8000, as: 8080 }
 
+- !Service
+  name: redis
+  image: !DockerImage redis:latest
+  ports:
+    - !Expose { port: 6379, as: 6379 }
+
 - !Image
   name: env
   repository: reg.local/env
