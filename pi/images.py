@@ -1,6 +1,6 @@
 from operator import attrgetter
 from functools import partial
-from collections import Counter
+from collections import Counter, defaultdict, namedtuple
 
 from ._requires import click
 
@@ -69,7 +69,7 @@ def _build_image(ctx, *, name):
                        .format(docker_image.name))
 
 
-@click.command('list')
+@click.command('list', help='List known images')
 @click.pass_context
 def image_list(ctx):
     from ._requires.tabulate import tabulate
@@ -100,7 +100,7 @@ def image_list(ctx):
                                        'Size', 'Versions']))
 
 
-@click.command('pull')
+@click.command('pull', help='Pull image version')
 @click.argument('name')
 @click.pass_context
 def image_pull(ctx, name):
@@ -113,7 +113,7 @@ def image_pull(ctx, name):
         ctx.exit(1)
 
 
-@click.command('push')
+@click.command('push', help='Push image version')
 @click.argument('name')
 @click.pass_context
 def image_push(ctx, name):
@@ -126,7 +126,7 @@ def image_push(ctx, name):
         ctx.exit(1)
 
 
-@click.command('shell')
+@click.command('shell', help='Inspect image using shell')
 @click.argument('name')
 @click.option('-v', '--volume', multiple=True,
               help='Mount volume: "/host" or "/host:/container" or '
@@ -159,11 +159,48 @@ def image_shell(ctx, name, volume):
                       volumes=volumes))
 
 
+_Tag = namedtuple('_Tag', 'value created')
+
+
+@click.command('gc', help='Delete old image versions')
+@click.option('-c', '--count', type=click.INT, default=2, show_default=True,
+              help='How much versions to leave')
+@click.pass_context
+def image_gc(ctx, count):
+    known_repos = {l.image.repository for l in ctx.obj.layers.values()}
+    repo_tags_used = {c['Image'] for c in ctx.obj.client.containers(all=True)}
+
+    by_repo = defaultdict(list)
+    to_delete = []
+
+    for image in ctx.obj.client.images():
+        repo_tags = set(image['RepoTags'])
+        if repo_tags == {'<none>:<none>'}:
+            to_delete.append(image['Id'])
+            continue
+        repo_tags.difference_update(repo_tags_used)
+        for repo_tag in repo_tags:
+            repo, _, tag = repo_tag.partition(':')
+            if repo in known_repos:
+                by_repo[repo].append(_Tag(tag, image['Created']))
+
+    for repo, tags in by_repo.items():
+        for tag in sorted(tags, key=attrgetter('created'))[count:]:
+            to_delete.append('{}:{}'.format(repo, tag.value))
+
+    for image in to_delete:
+        ctx.obj.client.remove_image(image)
+        click.echo('Removed: {}'.format(image))
+
+
 def create_images_cli(layers):
     cli = click.Group()
     image_group = click.Group('image')
 
-    build_help = BUILD_NO_IMAGES if not layers else None
+    if layers:
+        build_help = 'Build image version'
+    else:
+        build_help = BUILD_NO_IMAGES
     build_group = click.Group('build', help=build_help)
     for layer in layers:
         callback = partial(_build_image, name=layer.name)
@@ -176,6 +213,7 @@ def create_images_cli(layers):
     image_group.add_command(image_pull)
     image_group.add_command(image_push)
     image_group.add_command(image_shell)
+    image_group.add_command(image_gc)
 
     cli.add_command(image_group)
     return cli
