@@ -167,6 +167,9 @@ _Tag = namedtuple('_Tag', 'value created')
               help='How much versions to leave')
 @click.pass_context
 def image_gc(ctx, count):
+    if count < 0:
+        click.echo('Count should be more or equal to 0')
+        ctx.exit(-1)
     known_repos = {l.image.repository for l in ctx.obj.layers.values()}
     repo_tags_used = {c['Image'] for c in ctx.obj.client.containers(all=True)}
 
@@ -185,7 +188,8 @@ def image_gc(ctx, count):
                 by_repo[repo].append(_Tag(tag, image['Created']))
 
     for repo, tags in by_repo.items():
-        for tag in sorted(tags, key=attrgetter('created'))[count:]:
+        latest_tags = sorted(tags, key=attrgetter('created'), reverse=True)
+        for tag in latest_tags[count:]:
             to_delete.append('{}:{}'.format(repo, tag.value))
 
     for image in to_delete:
