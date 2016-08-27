@@ -47,3 +47,9 @@ class ImmutableDict(dict):
 
     __delitem__ = __setitem__ = _immutable
     clear = pop = popitem = setdefault = update = _immutable
+
+
+def search_container(label, containers):
+    for container in containers:
+        if label in container['Labels']:
+            yield container

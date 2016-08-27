@@ -6,7 +6,7 @@ from tempfile import NamedTemporaryFile
 
 from ._res import LOCAL_PYTHON_BIN, LOCAL_PYTHON_LIB
 
-from .utils import cached_property
+from .utils import cached_property, search_container
 from .types import DockerImage
 
 
@@ -66,6 +66,22 @@ class Context:
             image = layer.docker_image()
         # check and autoload image
         return image
+
+    def ensure_running(self, service_names):
+        services = [self.services[name] for name in service_names]
+        containers = self.client.containers(all=True)
+        hosts = {}
+        for service in services:
+            label = 'pi-{}'.format(service.name)
+            container = next(search_container(label, containers), None)
+            if container is None:
+                raise RuntimeError('Service {} is not running'
+                                   .format(service.name))
+            if container['State'] != 'running':
+                assert False, 'TODO: auto-start'
+            ip = container['NetworkSettings']['Networks']['bridge']['IPAddress']
+            hosts[service.name] = ip
+        return hosts
 
     def layers_path(self, name):
         path = []

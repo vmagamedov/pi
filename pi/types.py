@@ -183,6 +183,30 @@ class Expose(MappingConstruct):
         self.proto = proto
 
 
+class Service(MappingConstruct):
+    __tag__ = '!Service'
+    __params__ = ImmutableDict([
+        ('name', 'name'),
+        ('image', 'image'),
+        ('volumes', 'volumes'),
+        ('ports', 'ports'),
+        ('description', 'description'),
+    ])
+
+    def __init__(self, name: str, image: Union[DockerImage, str],
+                 volumes: Optional[Sequence[VolumeType]]=None,
+                 ports: Optional[Sequence[Expose]]=None,
+                 description: Optional[str]=None):
+        self.name = name
+        self.image = image
+        self.volumes = volumes
+        self.ports = ports
+        self.description = description
+
+    def accept(self, visitor):
+        return visitor.visit_service(self)
+
+
 class ParameterType:
     __params__ = ImmutableDict([
         ('name', 'name'),
@@ -237,6 +261,7 @@ class ShellCommand(CommandType, MappingConstruct):
         ('volumes', 'volumes'),
         ('ports', 'ports'),
         ('raw-input', 'raw_input'),
+        ('requires', 'requires'),
         ('description', 'description'),
     ])
 
@@ -245,6 +270,7 @@ class ShellCommand(CommandType, MappingConstruct):
                  volumes: Optional[Sequence[VolumeType]]=None,
                  ports: Optional[Sequence[Expose]]=None,
                  raw_input: Optional[bool]=False,
+                 requires: Optional[Sequence[str]]=None,
                  description: Optional[str]=None):
         self.name = name
         self.image = image
@@ -253,6 +279,7 @@ class ShellCommand(CommandType, MappingConstruct):
         self.volumes = volumes
         self.ports = ports
         self.raw_input = raw_input
+        self.requires = requires
         self.description = description
 
     def accept(self, visitor):
@@ -268,6 +295,7 @@ class SubCommand(CommandType, MappingConstruct):
         ('volumes', 'volumes'),
         ('ports', 'ports'),
         ('raw-input', 'raw_input'),
+        ('requires', 'requires'),
         ('description', 'description'),
     ])
 
@@ -276,6 +304,7 @@ class SubCommand(CommandType, MappingConstruct):
                  volumes: Optional[Sequence[VolumeType]]=None,
                  ports: Optional[Sequence[Expose]]=None,
                  raw_input: Optional[bool]=False,
+                 requires: Optional[Sequence[str]]=None,
                  description: Optional[str]=None):
         self.name = name
         self.image = image
@@ -283,31 +312,8 @@ class SubCommand(CommandType, MappingConstruct):
         self.volumes = volumes
         self.ports = ports
         self.raw_input = raw_input
+        self.requires = requires
         self.description = description
 
     def accept(self, visitor):
         return visitor.visit_subcommand(self)
-
-
-class Service(MappingConstruct):
-    __tag__ = '!Service'
-    __params__ = ImmutableDict([
-        ('name', 'name'),
-        ('image', 'image'),
-        ('volumes', 'volumes'),
-        ('ports', 'ports'),
-        ('description', 'description'),
-    ])
-
-    def __init__(self, name: str, image: Union[DockerImage, str],
-                 volumes: Optional[Sequence[VolumeType]]=None,
-                 ports: Optional[Sequence[Expose]]=None,
-                 description: Optional[str]=None):
-        self.name = name
-        self.image = image
-        self.volumes = volumes
-        self.ports = ports
-        self.description = description
-
-    def accept(self, visitor):
-        return visitor.visit_service(self)

@@ -2,16 +2,11 @@ from ._requires import click
 from ._requires.tabulate import tabulate
 
 from .run import start
+from .utils import search_container
 from .types import Service, DockerImage
 from .actors import init
 from .console import pretty
 from .commands import get_volumes
-
-
-def _search(label, containers):
-    for container in containers:
-        if label in container['Labels']:
-            yield container
 
 
 @click.pass_context
@@ -22,7 +17,8 @@ def _start_callback(ctx, name):
         ctx.exit(-1)
 
     label = 'pi-{}'.format(service.name)
-    container = next(_search(label, ctx.obj.client.containers(all=True)), None)
+    containers = ctx.obj.client.containers(all=True)
+    container = next(search_container(label, containers), None)
     if container is not None:
         if container['State'] == 'running':
             click.echo('Service is already running')
@@ -46,7 +42,8 @@ def _stop_callback(ctx, name):
         ctx.exit(-1)
 
     label = 'pi-{}'.format(service.name)
-    containers = list(_search(label, ctx.obj.client.containers(all=True)))
+    all_containers = ctx.obj.client.containers(all=True)
+    containers = list(search_container(label, all_containers))
     if not containers:
         click.echo('Service was not started')
         ctx.exit(-1)

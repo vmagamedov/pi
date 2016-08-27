@@ -62,10 +62,11 @@ def render_template(template, params):
 
 
 def execute(client, image, command, *, volumes=None, ports=None,
-            work_dir=None, raw_input=False):
+            work_dir=None, hosts=None, raw_input=False):
     with config_tty(raw_input) as fd:
         return init(run, client, fd, image, command,
-                    volumes=volumes, ports=ports, work_dir=work_dir)
+                    volumes=volumes, ports=ports, work_dir=work_dir,
+                    hosts=hosts)
 
 
 class _ParameterCreator:
@@ -112,6 +113,7 @@ class _CommandCreator:
         @click.pass_context
         def cb(ctx, **kw):
             docker_image = ctx.obj.require_image(command.image)
+            hosts = ctx.obj.ensure_running(command.requires or [])
 
             volumes = get_volumes(command.volumes)
             volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
@@ -124,6 +126,7 @@ class _CommandCreator:
                                 volumes=volumes,
                                 ports=command.ports,
                                 work_dir=get_work_dir(command.volumes),
+                                hosts=hosts,
                                 raw_input=command.raw_input)
             ctx.exit(exit_code)
 
@@ -143,11 +146,14 @@ class _CommandCreator:
         @click.pass_context
         def cb(ctx, args):
             docker_image = ctx.obj.require_image(command.image)
+            hosts = ctx.obj.ensure_running(command.requires or [])
+
             exit_code = execute(ctx.obj.client, docker_image,
                                 call + args,
                                 volumes=get_volumes(command.volumes),
                                 ports=command.ports,
                                 work_dir=get_work_dir(command.volumes),
+                                hosts=hosts,
                                 raw_input=command.raw_input)
             ctx.exit(exit_code)
 

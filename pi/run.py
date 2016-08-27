@@ -99,7 +99,7 @@ def _port_binds(ports):
 
 
 def start(self, client, image, command, *, entrypoint=None,
-          volumes=None, ports=None, work_dir=None, label=None):
+          volumes=None, ports=None, work_dir=None, hosts=None, label=None):
     volumes = volumes or []
     container_volumes = _VolumeBinds.translate_volumes(volumes)
     container_volume_binds = _VolumeBinds.translate_binds(volumes)
@@ -128,7 +128,8 @@ def start(self, client, image, command, *, entrypoint=None,
     try:
         yield from self.exec(client.start, c,
                              binds=container_volume_binds,
-                             port_bindings=container_port_binds)
+                             port_bindings=container_port_binds,
+                             extra_hosts=hosts)
     except APIError as e:
         click.echo(e.explanation)
         yield from self.exec(client.remove_container, c, v=True, force=True)
@@ -167,10 +168,10 @@ def attach(self, client, container, input_fd, *, wait_exit=3):
 
 
 def run(self, client, input_fd, image, command, *,
-        volumes=None, ports=None, work_dir=None,
+        volumes=None, ports=None, work_dir=None, hosts=None,
         wait_exit=3):
     c = yield from start(self, client, image, command, volumes=volumes,
-                         ports=ports, work_dir=work_dir)
+                         ports=ports, work_dir=work_dir, hosts=hosts)
     if c is None:
         return
     try:
