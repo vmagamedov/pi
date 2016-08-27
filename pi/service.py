@@ -59,7 +59,7 @@ def _stop_callback(ctx, name):
 
 
 @click.pass_context
-def _list_callback(ctx):
+def _status_callback(ctx):
     containers = ctx.obj.client.containers(all=True)
 
     running = set()
@@ -115,7 +115,8 @@ def create_service_cli(services):
                       callback=_stop_callback, help='Stop service')
     )
     service_group.add_command(
-        click.Command('list', callback=_list_callback, help='List services')
+        click.Command('status', callback=_status_callback,
+                      help='Services status')
     )
     cli = click.Group()
     cli.add_command(service_group)
