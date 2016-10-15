@@ -32,8 +32,10 @@ def _build_image(ctx, *, name):
         docker_image = layer.docker_image()
         if not ctx.obj.image_exists(docker_image):
             if not ctx.obj.image_pull(docker_image, echo_download_progress):
-                builder = Builder(ctx.obj.client, layer)
-                if not builder.visit(layer.image.provision_with):
+                builder = Builder(ctx.obj.client, ctx.obj.async_client, layer,
+                                  loop=ctx.obj.loop)
+                build_coro = builder.visit(layer.image.provision_with)
+                if not ctx.obj.loop.run_until_complete(build_coro):
                     ctx.exit(1)
         else:
             click.echo('Already exists: {}'

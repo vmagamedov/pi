@@ -9,6 +9,7 @@ from .run import run
 from .types import CommandType, LocalPath, Mode
 from .actors import init
 from .console import config_tty
+from .resolve import resolve
 
 
 DUMB_INIT_REMOTE_PATH = '/.pi-dumb-init'
@@ -97,6 +98,19 @@ def get_work_dir(volumes):
     return '.' if volumes is None else '/'
 
 
+def _resolve(context, command):
+    resolve_task = resolve(
+        context.client,
+        context.async_client,
+        context.layers,
+        context.services,
+        command,
+        loop=context.loop,
+        build=True,
+    )
+    context.loop.run_until_complete(resolve_task)
+
+
 class _CommandCreator:
 
     def __init__(self, name):
@@ -112,6 +126,8 @@ class _CommandCreator:
 
         @click.pass_context
         def cb(ctx, **kw):
+            _resolve(ctx.obj, command)
+
             docker_image = ctx.obj.require_image(command.image)
             hosts = ctx.obj.ensure_running(command.requires or [])
 
@@ -145,6 +161,8 @@ class _CommandCreator:
 
         @click.pass_context
         def cb(ctx, args):
+            _resolve(ctx.obj, command)
+
             docker_image = ctx.obj.require_image(command.image)
             hosts = ctx.obj.ensure_running(command.requires or [])
 

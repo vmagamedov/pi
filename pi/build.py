@@ -1,13 +1,17 @@
 import io
 import re
+import sys
+import json
 import tarfile
+import logging
 import subprocess
+from asyncio import coroutine
 from tempfile import NamedTemporaryFile
 
 from ._res import LOCAL_PYTHON_BIN, LOCAL_PYTHON_LIB
 
-from .client import echo_build_progress
 
+log = logging.getLogger(__name__)
 
 ANCESTOR_RE = re.compile(b'^FROM[ ]+\{\{ancestor\}\}',
                          flags=re.MULTILINE)
@@ -47,11 +51,47 @@ def _pi_python_tar():
     return f
 
 
+def echo_build_progress(client, output):
+    error = False
+    latest_container = None
+    try:
+        for line in output:
+            log.debug(line)
+            # FIXME: There is a bug in docker or docker-py: possibility
+            # of more than one chunks in one line.
+            chunks = line.decode('utf-8').splitlines()
+            for chunk in chunks:
+                status = json.loads(chunk)
+                if 'stream' in status:
+                    sys.stdout.write(status['stream'])
+                    match = re.search(u'Running in ([0-9a-f]+)',
+                                      status['stream'])
+                    if match:
+                        latest_container = match.group(1)
+                elif 'error' in status:
+                    error = True
+                    sys.stdout.write(status['error'])
+        return not error
+    except BaseException as original_exc:
+        try:
+            if latest_container is not None:
+                sys.stdout.write('Stopping current container {}...'
+                                 .format(latest_container))
+                client.stop(latest_container, 5)
+                client.remove_container(latest_container)
+        except Exception:
+            log.exception('Failed to delete current container')
+        finally:
+            raise original_exc
+
+
 class Builder(object):
 
-    def __init__(self, client, layer):
+    def __init__(self, client, async_client, layer, *, loop):
         self.client = client
+        self.async_client = async_client
         self.layer = layer
+        self.loop = loop
         if layer.parent:
             from_ = layer.parent.docker_image()
         else:
@@ -61,6 +101,7 @@ class Builder(object):
     def visit(self, obj):
         return obj.accept(self)
 
+    @coroutine
     def visit_dockerfile(self, obj):
         image = self.layer.docker_image()
 
@@ -71,22 +112,36 @@ class Builder(object):
             from_stmt = 'FROM {}'.format(self.from_.name).encode('ascii')
             docker_file = ANCESTOR_RE.sub(from_stmt, docker_file)
 
-        output = self.client.build(tag=image.name,
-                                   fileobj=io.BytesIO(docker_file),
-                                   rm=True, stream=True)
-        return echo_build_progress(self.client, output)
+        output = yield from self.async_client.build(
+            tag=image.name,
+            fileobj=io.BytesIO(docker_file),
+            rm=True,
+            stream=True,
+        )
+        result = yield from self.loop.run_in_executor(
+            None,
+            echo_build_progress,
+            self.client,
+            output,
+        )
+        return result
 
+    @coroutine
     def visit_ansibletasks(self, obj):
         from ._requires import yaml
 
-        c = self.client.create_container(self.from_.name, '/bin/sh',
-                                         detach=True, tty=True)
+        c = yield from self.async_client.create_container(
+            self.from_.name,
+            '/bin/sh',
+            detach=True,
+            tty=True,
+        )
 
         c_id = c['Id']
         plays = [{'hosts': c_id, 'tasks': obj.tasks}]
         try:
-            self.client.start(c)
-            self.client.put_archive(c, '/', _pi_python_tar())
+            yield from self.async_client.start(c)
+            yield from self.async_client.put_archive(c, '/', _pi_python_tar())
             with NamedTemporaryFile('w+', encoding='utf-8') as pb_file, \
                     NamedTemporaryFile('w+', encoding='ascii') as inv_file:
                 pb_file.write(yaml.dump(plays))
@@ -98,22 +153,29 @@ class Builder(object):
                 ))
                 inv_file.flush()
 
-                exit_code = subprocess.call(['ansible-playbook',
-                                             '-i', inv_file.name,
-                                             pb_file.name])
+                def call_ansible():
+                    return subprocess.call(['ansible-playbook',
+                                            '-i', inv_file.name,
+                                            pb_file.name])
+                exit_code = yield from self.loop.run_in_executor(None, call_ansible)
                 if exit_code:
                     return False
 
                 # cleanup
-                rm_id = self.client.exec_create(c, ['rm', '-rf',
-                                                    REMOTE_PYTHON_PREFIX])
-                self.client.exec_start(rm_id)
+                rm_id = yield from self.async_client.exec_create(
+                    c,
+                    ['rm', '-rf', REMOTE_PYTHON_PREFIX],
+                )
+                yield from self.async_client.exec_start(rm_id)
 
                 # commit
-                self.client.pause(c)
-                self.client.commit(c, self.layer.image.repository,
-                                   self.layer.version())
-                self.client.unpause(c)
+                yield from self.async_client.pause(c)
+                yield from self.async_client.commit(
+                    c,
+                    self.layer.image.repository,
+                    self.layer.version(),
+                )
+                yield from self.async_client.unpause(c)
                 return True
         finally:
-            self.client.remove_container(c, v=True, force=True)
+            yield from self.async_client.remove_container(c, v=True, force=True)

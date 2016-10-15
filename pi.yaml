@@ -46,3 +46,9 @@
   from: env
   repository: reg.local/app.env.dockerfile
   provision-with: !Dockerfile Dockerfile.app.env
+
+
+- !SubCommand
+  name: test
+  image: app.env.ansible
+  call: echo

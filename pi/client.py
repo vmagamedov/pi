@@ -1,10 +1,9 @@
-import re
 import sys
 import json
 import logging
 
 from asyncio import coroutine
-
+from functools import partial
 
 from ._requires.docker import Client, errors
 
@@ -51,40 +50,6 @@ def echo_download_progress(output):
     return not error
 
 
-def echo_build_progress(client, output):
-    error = False
-    latest_container = None
-    try:
-        for line in output:
-            log.debug(line)
-            # FIXME: There is a bug in docker or docker-py: possibility
-            # of more than one chunks in one line.
-            chunks = line.decode('utf-8').splitlines()
-            for chunk in chunks:
-                status = json.loads(chunk)
-                if 'stream' in status:
-                    sys.stdout.write(status['stream'])
-                    match = re.search(u'Running in ([0-9a-f]+)',
-                                      status['stream'])
-                    if match:
-                        latest_container = match.group(1)
-                elif 'error' in status:
-                    error = True
-                    sys.stdout.write(status['error'])
-        return not error
-    except BaseException as original_exc:
-        try:
-            if latest_container is not None:
-                sys.stdout.write('Stopping current container {}...'
-                                 .format(latest_container))
-                client.stop(latest_container, 5)
-                client.remove_container(latest_container)
-        except Exception:
-            log.exception('Failed to delete current container')
-        finally:
-            raise original_exc
-
-
 def get_client():
     return Client.from_env()
 
@@ -96,9 +61,40 @@ class AsyncClient:
         self._loop = loop
 
     @coroutine
-    def _exec(self, func, *args):
-        result = yield from self._loop.run_in_executor(None, func, *args)
+    def _exec(self, func, *args, **kwargs):
+        wrapper = partial(func, *args, **kwargs)
+        result = yield from self._loop.run_in_executor(None, wrapper)
         return result
 
-    def images(self):
-        return self._exec(self._client.images)
+    def images(self, *args, **kwargs):
+        return self._exec(self._client.images, *args, **kwargs)
+
+    def build(self, *args, **kwargs):
+        return self._exec(self._client.build, *args, **kwargs)
+
+    def create_container(self, *args, **kwargs):
+        return self._exec(self._client.create_container, *args, **kwargs)
+
+    def start(self, *args, **kwargs):
+        return self._exec(self._client.start, *args, **kwargs)
+
+    def remove_container(self, *args, **kwargs):
+        return self._exec(self._client.remove_container, *args, **kwargs)
+
+    def put_archive(self, *args, **kwargs):
+        return self._exec(self._client.put_archive, *args, **kwargs)
+
+    def exec_create(self, *args, **kwargs):
+        return self._exec(self._client.exec_create, *args, **kwargs)
+
+    def exec_start(self, *args, **kwargs):
+        return self._exec(self._client.exec_start, *args, **kwargs)
+
+    def pause(self, *args, **kwargs):
+        return self._exec(self._client.pause, *args, **kwargs)
+
+    def commit(self, *args, **kwargs):
+        return self._exec(self._client.commit, *args, **kwargs)
+
+    def unpause(self, *args, **kwargs):
+        return self._exec(self._client.unpause, *args, **kwargs)
