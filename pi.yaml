@@ -5,14 +5,14 @@
 - !ShellCommand
   name: app echo
   description: Echo greeting
-  image: env
+  image: app.env.ansible
   params:
     - !Argument {name: name, default: World}
   shell: echo "Hello {{name}}!!!"
 
 - !SubCommand
   name: ping
-  image: !DockerImage ubuntu:trusty
+  image: !DockerImage ubuntu:xenial
   call: ping
 
 - !SubCommand
@@ -35,8 +35,14 @@
   provision-with: !Dockerfile Dockerfile.env
 
 - !Image
-  name: app.env
-  from: !DockerImage ubuntu:xenial
-  repository: reg.local/app.env
+  name: app.env.ansible
+  from: env
+  repository: reg.local/app.env.ansible
   provision-with: !AnsibleTasks
-    - file: path=/foo.ini state=touch
+    - file: path=/app.env.ansible.txt state=touch
+
+- !Image
+  name: app.env.dockerfile
+  from: env
+  repository: reg.local/app.env.dockerfile
+  provision-with: !Dockerfile Dockerfile.app.env

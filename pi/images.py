@@ -7,45 +7,15 @@ from ._requires import click
 from .run import run
 from .types import DockerImage, Image, LocalPath, Mode
 from .utils import format_size
+from .build import Builder
 from .layers import Layer
-from .client import echo_download_progress, echo_build_progress
+from .client import echo_download_progress
 from .actors import init
 from .console import pretty
 from .console import config_tty
 
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
-
-
-class Builder(object):
-
-    def __init__(self, layer, ctx):
-        self.layer = layer
-        self.ctx = ctx
-        if layer.parent:
-            from_ = layer.parent.docker_image()
-        else:
-            from_ = layer.image.from_
-        self.from_ = from_
-
-    def visit(self, obj):
-        return obj.accept(self)
-
-    def visit_dockerfile(self, obj):
-        return self.ctx.obj.image_build_dockerfile(
-            self.layer.docker_image(),
-            obj.file_name,
-            self.from_,
-            echo_build_progress,
-        )
-
-    def visit_ansibletasks(self, obj):
-        return self.ctx.obj.image_build_ansibletasks(
-            self.layer.image.repository,
-            self.layer.version(),
-            obj.tasks,
-            self.from_,
-        )
 
 
 def _build_image(ctx, *, name):
@@ -62,7 +32,8 @@ def _build_image(ctx, *, name):
         docker_image = layer.docker_image()
         if not ctx.obj.image_exists(docker_image):
             if not ctx.obj.image_pull(docker_image, echo_download_progress):
-                if not Builder(layer, ctx).visit(layer.image.provision_with):
+                builder = Builder(ctx.obj.client, layer)
+                if not builder.visit(layer.image.provision_with):
                     ctx.exit(1)
         else:
             click.echo('Already exists: {}'
@@ -85,7 +56,7 @@ def image_list(ctx):
             sizes[repo_tag] = image['VirtualSize']
 
     rows = []
-    for layer in sorted(ctx.obj.layers.values(), key=attrgetter('name')):
+    for layer in sorted(ctx.obj.layers, key=attrgetter('name')):
         image_name = layer.docker_image().name
         if image_name in available:
             pretty_name = pretty('\u2714 {_green}{}{_r}', layer.name)
@@ -104,8 +75,9 @@ def image_list(ctx):
 @click.argument('name')
 @click.pass_context
 def image_pull(ctx, name):
-    if name in ctx.obj.layers:
-        image = ctx.obj.layers[name].docker_image()
+    mapping = {l.name: l for l in ctx.obj.layers}
+    if name in mapping:
+        image = mapping[name].docker_image()
     else:
         image = DockerImage(name)
     if not ctx.obj.image_pull(image, echo_download_progress):
@@ -117,8 +89,9 @@ def image_pull(ctx, name):
 @click.argument('name')
 @click.pass_context
 def image_push(ctx, name):
-    if name in ctx.obj.layers:
-        image = ctx.obj.layers[name].docker_image()
+    mapping = {l.name: l for l in ctx.obj.layers}
+    if name in mapping:
+        image = mapping[name].docker_image()
     else:
         image = DockerImage(name)
     if not ctx.obj.image_push(image, echo_download_progress):
@@ -133,8 +106,9 @@ def image_push(ctx, name):
                    '"/host:/container:rw"')
 @click.pass_context
 def image_shell(ctx, name, volume):
-    if name in ctx.obj.layers:
-        image = ctx.obj.layers[name].docker_image()
+    mapping = {l.name: l for l in ctx.obj.layers}
+    if name in mapping:
+        image = mapping[name].docker_image()
     else:
         image = DockerImage(name)
 
@@ -170,7 +144,7 @@ def image_gc(ctx, count):
     if count < 0:
         click.echo('Count should be more or equal to 0')
         ctx.exit(-1)
-    known_repos = {l.image.repository for l in ctx.obj.layers.values()}
+    known_repos = {l.image.repository for l in ctx.obj.layers}
     repo_tags_used = {c['Image'] for c in ctx.obj.client.containers(all=True)}
 
     by_repo = defaultdict(list)

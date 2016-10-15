@@ -11,7 +11,8 @@ from .commands import get_volumes
 
 @click.pass_context
 def _start_callback(ctx, name):
-    service = ctx.obj.services.get(name)
+    mapping = {s.name: s for s in ctx.obj.services}
+    service = mapping.get(name)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
         ctx.exit(-1)
@@ -36,7 +37,8 @@ def _start_callback(ctx, name):
 
 @click.pass_context
 def _stop_callback(ctx, name):
-    service = ctx.obj.services.get(name)
+    mapping = {s.name: s for s in ctx.obj.services}
+    service = mapping.get(name)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
         ctx.exit(-1)
@@ -71,7 +73,7 @@ def _status_callback(ctx):
             images[label] = container['Image']
 
     rows = []
-    for service in ctx.obj.services.values():
+    for service in ctx.obj.services:
         label = 'pi-{}'.format(service.name)
         if label in running:
             status = pretty('{_green}running{_r}')
@@ -86,7 +88,8 @@ def _status_callback(ctx):
         if isinstance(service.image, DockerImage):
             docker_image = service.image
         else:
-            docker_image = ctx.obj.layers[service.image].docker_image()
+            mapping = {l.name: l for l in ctx.obj.layers}
+            docker_image = mapping[service.image].docker_image()
 
         if image is not None and image != docker_image.name:
             image += ' (obsolete)'
