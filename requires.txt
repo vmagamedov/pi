@@ -9,3 +9,4 @@ markupsafe==0.23
 websocket-client==0.37.0
 backports.ssl_match_hostname==3.5.0.1
 tabulate==0.7.5
+attrs==16.1.0

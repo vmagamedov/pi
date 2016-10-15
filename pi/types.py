@@ -1,5 +1,6 @@
 from enum import Enum
 
+from ._requires import attr
 from ._requires.typing import Optional, Union, Any, Sequence
 
 from .utils import ImmutableDict
@@ -50,15 +51,14 @@ class Meta(MappingConstruct):
     def __init__(self, description: Optional[str]=None):
         self.description = description
 
+    def accept(self, visitor):
+        return visitor.visit_meta(self)
 
+
+@attr.s
 class DockerImage(ScalarConstruct):
     __tag__ = '!DockerImage'
-
-    def __init__(self, name: str):
-        self.name = name
-
-    def __repr__(self):
-        return '<{}({.name!r})>'.format(self.__tag__, self)
+    name = attr.ib()
 
 
 class ProvisionType:
@@ -93,6 +93,7 @@ class AnsibleTasks(ProvisionType, SequenceConstruct):
         return visitor.visit_ansibletasks(self)
 
 
+@attr.s
 class Image(MappingConstruct):
     __tag__ = '!Image'
     __params__ = ImmutableDict([
@@ -102,20 +103,13 @@ class Image(MappingConstruct):
         ('from', 'from_'),
     ])
 
-    def __init__(self, name: str, repository: str,
-                 provision_with: ProvisionType,
-                 from_: Optional[Union[DockerImage, str]]=None):
-        self.name = name
-        self.repository = repository
-        self.provision_with = provision_with
-        self.from_ = from_
+    name = attr.ib()
+    repository = attr.ib()
+    provision_with = attr.ib()
+    from_ = attr.ib(default=None)
 
-    def __repr__(self):
-        return (
-            '<{0.__tag__}(name={0.name!r} repository={0.repository!r} '
-            'provision-with={0.provision_with!r} from={0.from_!r})>'
-            .format(self)
-        )
+    def accept(self, visitor):
+        return visitor.visit_image(self)
 
 
 class VolumeType:
