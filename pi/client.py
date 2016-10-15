@@ -3,6 +3,9 @@ import sys
 import json
 import logging
 
+from asyncio import coroutine
+
+
 from ._requires.docker import Client, errors
 
 
@@ -84,3 +87,18 @@ def echo_build_progress(client, output):
 
 def get_client():
     return Client.from_env()
+
+
+class AsyncClient:
+
+    def __init__(self, *, loop):
+        self._client = Client.from_env()
+        self._loop = loop
+
+    @coroutine
+    def _exec(self, func, *args):
+        result = yield from self._loop.run_in_executor(None, func, *args)
+        return result
+
+    def images(self):
+        return self._exec(self._client.images)
