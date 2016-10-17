@@ -30,26 +30,38 @@ class SequenceConstruct:
 
 
 class MappingConstruct:
-    __params__ = ImmutableDict()
+    __rename_to__ = ImmutableDict()
 
     @classmethod
     def construct(cls, loader, node):
+        rename_from = {v: k for k, v in cls.__rename_to__.items()}
+        
         params = loader.construct_mapping(node, deep=True)
-        unknown = set(params).difference(cls.__params__)
-        if unknown:
-            raise TypeError('Unknown params {!r} for {!r}'.format(unknown, cls))
-        clean_params = {cls.__params__[k]: v for k, v in params.items()}
+        
+        required = {rename_from.get(a.name, a.name)
+                    for a in cls.__attrs_attrs__
+                    if a.default is attr.NOTHING}
+        
+        optional = {rename_from.get(a.name, a.name)
+                    for a in cls.__attrs_attrs__
+                    if a.default is not attr.NOTHING}
+        
+        missing = set(required).difference(params)
+        if missing:
+            raise TypeError('Missing params {!r} for {!r}'.format(missing, cls))
+        
+        clean_params = {cls.__rename_to__.get(k, k): v
+                        for k, v in params.items()
+                        if k in required or k in optional}
+
         return cls(**clean_params)
 
 
+@attr.s
 class Meta(MappingConstruct):
     __tag__ = '!Meta'
-    __params__ = ImmutableDict([
-        ('description', 'description'),
-    ])
 
-    def __init__(self, description: Optional[str]=None):
-        self.description = description
+    description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
         return visitor.visit_meta(self)
@@ -67,27 +79,21 @@ class ProvisionType:
         raise NotImplementedError
 
 
+@attr.s
 class Dockerfile(ProvisionType, ScalarConstruct):
     __tag__ = '!Dockerfile'
 
-    def __init__(self, file_name: Optional[str]):
-        self.file_name = file_name or 'Dockerfile'
-
-    def __repr__(self):
-        return '<{}({.file_name!r})>'.format(self.__tag__, self)
+    file_name = attr.ib(default='Dockerfile')  # type: str
 
     def accept(self, visitor):
         return visitor.visit_dockerfile(self)
 
 
+@attr.s
 class AnsibleTasks(ProvisionType, SequenceConstruct):
     __tag__ = '!AnsibleTasks'
 
-    def __init__(self, tasks: list):
-        self.tasks = tasks
-
-    def __repr__(self):
-        return '<{}([count={:d}])>'.format(self.__tag__, len(self.tasks))
+    tasks = attr.ib(hash=False)  # type: list
 
     def accept(self, visitor):
         return visitor.visit_ansibletasks(self)
@@ -96,17 +102,15 @@ class AnsibleTasks(ProvisionType, SequenceConstruct):
 @attr.s
 class Image(MappingConstruct):
     __tag__ = '!Image'
-    __params__ = ImmutableDict([
-        ('name', 'name'),
-        ('repository', 'repository'),
+    __rename_to__ = ImmutableDict([
         ('provision-with', 'provision_with'),
         ('from', 'from_'),
     ])
 
-    name = attr.ib()
-    repository = attr.ib()
-    provision_with = attr.ib()
-    from_ = attr.ib(default=None)
+    name = attr.ib()  # type: str
+    repository = attr.ib()  # type: str
+    provision_with = attr.ib()  # type: ProvisionType
+    from_ = attr.ib(default=None)  # type: Optional[Union[str, Dockerfile]]
 
     def accept(self, visitor):
         return visitor.visit_image(self)
@@ -126,100 +130,68 @@ class Mode(EnumConstruct, Enum):
         return getattr(visitor, 'visit_{}'.format(self.name))(self)
 
 
+@attr.s
 class LocalPath(VolumeType, MappingConstruct):
     __tag__ = '!LocalPath'
-    __params__ = ImmutableDict([
+    __rename_to__ = ImmutableDict([
         ('from', 'from_'),
-        ('to', 'to'),
-        ('mode', 'mode'),
     ])
 
-    def __init__(self, from_: str, to: str, mode: Mode=Mode.RO):
-        self.from_ = from_
-        self.to = to
-        self.mode = mode
+    from_ = attr.ib()  # type: str
+    to = attr.ib()  # type: str
+    mode = attr.ib(default=Mode.RO)  # type: Mode
 
     def accept(self, visitor):
         return visitor.visit_localpath(self)
 
 
+@attr.s
 class NamedVolume(VolumeType, MappingConstruct):
     __tag__ = '!NamedVolume'
-    __params__ = ImmutableDict([
-        ('name', 'name'),
-        ('to', 'to'),
-        ('mode', 'mode'),
-    ])
 
-    def __init__(self, name: str, to: str, mode: Mode=Mode.RO):
-        self.name = name
-        self.to = to
-        self.mode = mode
+    name = attr.ib()  # type: str
+    to = attr.ib()  # type: str
+    mode = attr.ib(default=Mode.RO)  # type: Mode
 
     def accept(self, visitor):
         return visitor.visit_namedvolume(self)
 
 
+@attr.s
 class Expose(MappingConstruct):
     __tag__ = '!Expose'
-    __params__ = ImmutableDict([
-        ('port', 'port'),
+    __rename_to__ = ImmutableDict([
         ('as', 'as_'),
-        ('addr', 'addr'),
-        ('proto', 'proto'),
     ])
 
-    def __init__(self, port: int, as_: int, addr: str='127.0.0.1',
-                 proto: str='tcp'):
-        self.port = port
-        self.as_ = as_
-        self.addr = addr
-        self.proto = proto
+    port = attr.ib()  # type: int
+    as_ = attr.ib()  # type: int
+    addr = attr.ib(default='127.0.0.1')  # type: str
+    proto = attr.ib(default='tcp')  # type: str
+
+    def accept(self, visitor):
+        return visitor.visit_expose(self)
 
 
+@attr.s
 class Service(MappingConstruct):
     __tag__ = '!Service'
-    __params__ = ImmutableDict([
-        ('name', 'name'),
-        ('image', 'image'),
-        ('volumes', 'volumes'),
-        ('ports', 'ports'),
-        ('description', 'description'),
-    ])
 
-    def __init__(self, name: str, image: Union[DockerImage, str],
-                 volumes: Optional[Sequence[VolumeType]]=None,
-                 ports: Optional[Sequence[Expose]]=None,
-                 description: Optional[str]=None):
-        self.name = name
-        self.image = image
-        self.volumes = volumes
-        self.ports = ports
-        self.description = description
+    name = attr.ib()  # type: str
+    image = attr.ib()  # type: Union[str, DockerImage]
+    volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
+    ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
+    description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
         return visitor.visit_service(self)
 
 
+@attr.s
 class ParameterType:
-    __params__ = ImmutableDict([
-        ('name', 'name'),
-        ('type', 'type'),
-        ('default', 'default'),
-    ])
-
-    def __init__(self, name: str, type: Optional[str]=None,
-                 default: Optional[Any]=None):
-        self.name = name
-        self.type = type
-        self.default = default
-
-    def __repr__(self):
-        return (
-            '<{0.__tag__}(name={0.name!r} type={0.type!r} '
-            'default={0.default!r})>'
-            .format(self)
-        )
+    name = attr.ib()  # type: str
+    type = attr.ib(default=None)  # type: Optional[str]
+    default = attr.ib(default=None)  # type: Any
 
     def accept(self, visitor):
         raise NotImplementedError
@@ -245,69 +217,42 @@ class CommandType:
         raise NotImplementedError
 
 
+@attr.s
 class ShellCommand(CommandType, MappingConstruct):
     __tag__ = '!ShellCommand'
-    __params__ = ImmutableDict([
-        ('name', 'name'),
-        ('image', 'image'),
-        ('params', 'params'),
-        ('shell', 'shell'),
-        ('volumes', 'volumes'),
-        ('ports', 'ports'),
+    __rename_to__ = ImmutableDict([
         ('raw-input', 'raw_input'),
-        ('requires', 'requires'),
-        ('description', 'description'),
     ])
 
-    def __init__(self, name: str, image: Union[DockerImage, str], shell: str,
-                 params: Optional[Sequence[ParameterType]]=None,
-                 volumes: Optional[Sequence[VolumeType]]=None,
-                 ports: Optional[Sequence[Expose]]=None,
-                 raw_input: Optional[bool]=False,
-                 requires: Optional[Sequence[str]]=None,
-                 description: Optional[str]=None):
-        self.name = name
-        self.image = image
-        self.params = params
-        self.shell = shell
-        self.volumes = volumes
-        self.ports = ports
-        self.raw_input = raw_input
-        self.requires = requires
-        self.description = description
+    name = attr.ib()  # type: str
+    image = attr.ib()  # type: Union[str, DockerImage]
+    shell = attr.ib()  # type: str
+    params = attr.ib(default=None)  # type: Optional[Sequence[ParameterType]]
+    volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
+    ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
+    raw_input = attr.ib(default=None)  # type: Optional[bool]
+    requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
+    description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
         return visitor.visit_shellcommand(self)
 
 
+@attr.s
 class SubCommand(CommandType, MappingConstruct):
     __tag__ = '!SubCommand'
-    __params__ = ImmutableDict([
-        ('name', 'name'),
-        ('image', 'image'),
-        ('call', 'call'),
-        ('volumes', 'volumes'),
-        ('ports', 'ports'),
+    __rename_to__ = ImmutableDict([
         ('raw-input', 'raw_input'),
-        ('requires', 'requires'),
-        ('description', 'description'),
     ])
 
-    def __init__(self, name: str, image: Union[DockerImage, str],
-                 call: Union[str, Sequence[str]],
-                 volumes: Optional[Sequence[VolumeType]]=None,
-                 ports: Optional[Sequence[Expose]]=None,
-                 raw_input: Optional[bool]=False,
-                 requires: Optional[Sequence[str]]=None,
-                 description: Optional[str]=None):
-        self.name = name
-        self.image = image
-        self.call = call
-        self.volumes = volumes
-        self.ports = ports
-        self.raw_input = raw_input
-        self.requires = requires
-        self.description = description
+    name = attr.ib()  # type: str
+    image = attr.ib()  # type: Union[str, DockerImage]
+    call = attr.ib()  # type: Union[str, Sequence[str]]
+    volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
+    ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
+    raw_input = attr.ib(default=None)  # type: Optional[bool]
+    requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
+    description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
         return visitor.visit_subcommand(self)
