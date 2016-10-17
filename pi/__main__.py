@@ -1,4 +1,4 @@
-from .cli import build_cli
+from .ui.main import build_cli
 
 
 def main():
