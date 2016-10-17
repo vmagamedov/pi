@@ -1,3 +1,4 @@
+import sys
 import shlex
 
 from ._requires import click
@@ -8,8 +9,10 @@ from ._res import DUMB_INIT_LOCAL_PATH
 from .run import run
 from .types import CommandType, LocalPath, Mode
 from .actors import init
+from .images import get_docker_image
 from .console import config_tty
 from .resolve import resolve
+from .service import ensure_running
 
 
 DUMB_INIT_REMOTE_PATH = '/.pi-dumb-init'
@@ -98,17 +101,24 @@ def get_work_dir(volumes):
     return '.' if volumes is None else '/'
 
 
-def _resolve(context, command):
+def _resolve(ctx, command):
     resolve_task = resolve(
-        context.client,
-        context.async_client,
-        context.layers,
-        context.services,
+        ctx.client,
+        ctx.async_client,
+        ctx.layers,
+        ctx.services,
         command,
-        loop=context.loop,
+        loop=ctx.loop,
         build=True,
     )
-    context.loop.run_until_complete(resolve_task)
+    ctx.loop.run_until_complete(resolve_task)
+
+
+def _start_services(ctx, command):
+    services = [ctx.services.get(name)
+                for name in command.requires or []]
+    hosts = ensure_running(ctx.client, services)
+    return hosts
 
 
 class _CommandCreator:
@@ -124,12 +134,11 @@ class _CommandCreator:
         params = [params_creator.visit(param)
                   for param in (command.params or [])]
 
-        @click.pass_context
+        @click.pass_obj
         def cb(ctx, **kw):
-            _resolve(ctx.obj, command)
-
-            docker_image = ctx.obj.require_image(command.image)
-            hosts = ctx.obj.ensure_running(command.requires or [])
+            _resolve(ctx, command)
+            docker_image = get_docker_image(ctx.layers, command.image)
+            hosts = _start_services(ctx, command)
 
             volumes = get_volumes(command.volumes)
             volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
@@ -138,13 +147,13 @@ class _CommandCreator:
             cmd = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
                    render_template(command.shell, kw)]
 
-            exit_code = execute(ctx.obj.client, docker_image, cmd,
+            exit_code = execute(ctx.client, docker_image, cmd,
                                 volumes=volumes,
                                 ports=command.ports,
                                 work_dir=get_work_dir(command.volumes),
                                 hosts=hosts,
                                 raw_input=command.raw_input)
-            ctx.exit(exit_code)
+            sys.exit(exit_code)
 
         short_help = None
         if command.description is not None:
@@ -159,21 +168,20 @@ class _CommandCreator:
         else:
             call = command.call
 
-        @click.pass_context
+        @click.pass_obj
         def cb(ctx, args):
-            _resolve(ctx.obj, command)
+            _resolve(ctx, command)
+            docker_image = get_docker_image(ctx.layers, command.image)
+            hosts = _start_services(ctx, command)
 
-            docker_image = ctx.obj.require_image(command.image)
-            hosts = ctx.obj.ensure_running(command.requires or [])
-
-            exit_code = execute(ctx.obj.client, docker_image,
+            exit_code = execute(ctx.client, docker_image,
                                 call + args,
                                 volumes=get_volumes(command.volumes),
                                 ports=command.ports,
                                 work_dir=get_work_dir(command.volumes),
                                 hosts=hosts,
                                 raw_input=command.raw_input)
-            ctx.exit(exit_code)
+            sys.exit(exit_code)
 
         short_help = None
         if command.description is not None:

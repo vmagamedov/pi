@@ -1,3 +1,5 @@
+import sys
+
 from operator import attrgetter
 from functools import partial
 from collections import Counter, defaultdict, namedtuple
@@ -18,39 +20,49 @@ from .console import config_tty
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
 
+def get_docker_image(layers, image):
+    if isinstance(image, str):
+        layer = layers.get(image)
+        return layer.docker_image()
+    elif isinstance(image, DockerImage):
+        return image
+    else:
+        raise TypeError(repr(image))
+
+
 def _build_image(ctx, *, name):
-    layers = ctx.obj.layers_path(name)
+    layers = ctx.layers_path(name)
 
     # check if base image exists
     base_image = layers[0].image.from_
     if base_image is not None:
-        if not ctx.obj.image_exists(base_image):
-            if not ctx.obj.image_pull(base_image, echo_download_progress):
-                ctx.exit(1)
+        if not ctx.image_exists(base_image):
+            if not ctx.image_pull(base_image, echo_download_progress):
+                sys.exit(1)
 
     for layer in layers:
         docker_image = layer.docker_image()
-        if not ctx.obj.image_exists(docker_image):
-            if not ctx.obj.image_pull(docker_image, echo_download_progress):
-                builder = Builder(ctx.obj.client, ctx.obj.async_client, layer,
-                                  loop=ctx.obj.loop)
+        if not ctx.image_exists(docker_image):
+            if not ctx.image_pull(docker_image, echo_download_progress):
+                builder = Builder(ctx.client, ctx.async_client, layer,
+                                  loop=ctx.loop)
                 build_coro = builder.visit(layer.image.provision_with)
-                if not ctx.obj.loop.run_until_complete(build_coro):
-                    ctx.exit(1)
+                if not ctx.loop.run_until_complete(build_coro):
+                    sys.exit(1)
         else:
             click.echo('Already exists: {}'
                        .format(docker_image.name))
 
 
 @click.command('list', help='List known images')
-@click.pass_context
+@click.pass_obj
 def image_list(ctx):
     from ._requires.tabulate import tabulate
 
     available = set()
     counts = Counter()
     sizes = {}
-    for image in ctx.obj.client.images():
+    for image in ctx.client.images():
         available.update(image['RepoTags'])
         for repo_tag in image['RepoTags']:
             repo, _ = repo_tag.split(':')
@@ -58,7 +70,7 @@ def image_list(ctx):
             sizes[repo_tag] = image['VirtualSize']
 
     rows = []
-    for layer in sorted(ctx.obj.layers, key=attrgetter('name')):
+    for layer in sorted(ctx.layers, key=attrgetter('name')):
         image_name = layer.docker_image().name
         if image_name in available:
             pretty_name = pretty('\u2714 {_green}{}{_r}', layer.name)
@@ -73,32 +85,33 @@ def image_list(ctx):
                                        'Size', 'Versions']))
 
 
+def _get_image(layers, name):
+    try:
+        layer = layers.get(name)
+    except KeyError:
+        return DockerImage(name)
+    else:
+        return layer.docker_image()
+
+
 @click.command('pull', help='Pull image version')
 @click.argument('name')
-@click.pass_context
+@click.pass_obj
 def image_pull(ctx, name):
-    mapping = {l.name: l for l in ctx.obj.layers}
-    if name in mapping:
-        image = mapping[name].docker_image()
-    else:
-        image = DockerImage(name)
-    if not ctx.obj.image_pull(image, echo_download_progress):
+    image = _get_image(ctx.layers, name)
+    if not ctx.image_pull(image, echo_download_progress):
         click.echo('Unable to pull image {}'.format(image.name))
-        ctx.exit(1)
+        sys.exit(1)
 
 
 @click.command('push', help='Push image version')
 @click.argument('name')
-@click.pass_context
+@click.pass_obj
 def image_push(ctx, name):
-    mapping = {l.name: l for l in ctx.obj.layers}
-    if name in mapping:
-        image = mapping[name].docker_image()
-    else:
-        image = DockerImage(name)
-    if not ctx.obj.image_push(image, echo_download_progress):
+    image = _get_image(ctx.layers, name)
+    if not ctx.image_push(image, echo_download_progress):
         click.echo('Unable to push image {}'.format(image.name))
-        ctx.exit(1)
+        sys.exit(1)
 
 
 @click.command('shell', help='Inspect image using shell')
@@ -106,13 +119,9 @@ def image_push(ctx, name):
 @click.option('-v', '--volume', multiple=True,
               help='Mount volume: "/host" or "/host:/container" or '
                    '"/host:/container:rw"')
-@click.pass_context
+@click.pass_obj
 def image_shell(ctx, name, volume):
-    mapping = {l.name: l for l in ctx.obj.layers}
-    if name in mapping:
-        image = mapping[name].docker_image()
-    else:
-        image = DockerImage(name)
+    image = _get_image(ctx.layers, name)
 
     volumes = []
     for v in volume:
@@ -131,7 +140,7 @@ def image_shell(ctx, name, volume):
         volumes.append(LocalPath(from_, to, mode))
 
     with config_tty(raw_input=True) as fd:
-        ctx.exit(init(run, ctx.obj.client, fd, image, '/bin/sh',
+        sys.exit(init(run, ctx.client, fd, image, '/bin/sh',
                       volumes=volumes))
 
 
@@ -141,18 +150,18 @@ _Tag = namedtuple('_Tag', 'value created')
 @click.command('gc', help='Delete old image versions')
 @click.option('-c', '--count', type=click.INT, default=2, show_default=True,
               help='How much versions to leave')
-@click.pass_context
+@click.pass_obj
 def image_gc(ctx, count):
     if count < 0:
         click.echo('Count should be more or equal to 0')
-        ctx.exit(-1)
-    known_repos = {l.image.repository for l in ctx.obj.layers}
-    repo_tags_used = {c['Image'] for c in ctx.obj.client.containers(all=True)}
+        sys.exit(-1)
+    known_repos = {l.image.repository for l in ctx.layers}
+    repo_tags_used = {c['Image'] for c in ctx.client.containers(all=True)}
 
     by_repo = defaultdict(list)
     to_delete = []
 
-    for image in ctx.obj.client.images():
+    for image in ctx.client.images():
         repo_tags = set(image['RepoTags'])
         if repo_tags == {'<none>:<none>'}:
             to_delete.append(image['Id'])
@@ -169,7 +178,7 @@ def image_gc(ctx, count):
             to_delete.append('{}:{}'.format(repo, tag.value))
 
     for image in to_delete:
-        ctx.obj.client.remove_image(image)
+        ctx.client.remove_image(image)
         click.echo('Removed: {}'.format(image))
 
 
@@ -184,7 +193,7 @@ def create_images_cli(layers):
     build_group = click.Group('build', help=build_help)
     for layer in layers:
         callback = partial(_build_image, name=layer.name)
-        callback = click.pass_context(callback)
+        callback = click.pass_obj(callback)
         cmd = click.Command(layer.name, callback=callback)
         build_group.add_command(cmd)
     image_group.add_command(build_group)

@@ -22,8 +22,8 @@ class Dep:
 class ImagesCollector:
 
     def __init__(self, layers, services):
-        self._layers_map = {l.name: l for l in layers}
-        self._services_map = {s.name for s in services}
+        self._layers = layers
+        self._services = services
         self._images = set()
 
     @classmethod
@@ -45,7 +45,7 @@ class ImagesCollector:
         if isinstance(image, DockerImage):
             self._images.add(Dep(None, image))
         else:
-            layer = self._layers_map[image]
+            layer = self._layers.get(image)
             self._images.add(Dep(layer.image, layer.docker_image()))
             if layer.image.from_ is not None:
                 self.add(layer.image.from_)
@@ -55,13 +55,13 @@ class ImagesCollector:
 
     def visit_shellcommand(self, obj):
         self.add(obj.image)
-        for service in (obj.requires or []):
-            self.visit(service)
+        for service_name in (obj.requires or []):
+            self.visit(self._services.get(service_name))
 
     def visit_subcommand(self, obj):
         self.add(obj.image)
-        for service in (obj.requires or []):
-            self.visit(service)
+        for service_name in (obj.requires or []):
+            self.visit(self._services.get(service_name))
 
 
 class Result(Enum):
@@ -84,7 +84,7 @@ def build_worker(client, async_client, layers, queue, result_queue, *, loop):
     while True:
         dep = yield from queue.get()
         try:
-            layer = {l.name: l for l in layers}[dep.image.name]
+            layer = layers.get(dep.image.name)
             builder = Builder(client, async_client, layer, loop=loop)
             result = yield from builder.visit(dep.image.provision_with)
         except Exception:
@@ -97,7 +97,8 @@ def build_worker(client, async_client, layers, queue, result_queue, *, loop):
 
 def build_deps_map(plain_deps):
     deps_set = set(plain_deps)
-    images_mapping = {d.image.name: d for d in plain_deps if d.image is not None}
+    images_mapping = {d.image.name: d for d in plain_deps
+                      if d.image is not None}
 
     deps = defaultdict(set)
 
@@ -107,8 +108,8 @@ def build_deps_map(plain_deps):
                 parent = images_mapping[dep.image.from_]
             elif isinstance(dep.image.from_, DockerImage):
                 parent = Dep(None, dep.image.from_)
-            elif dep.image.from_ is None and isinstance(dep.image.provision_with,
-                                                        Dockerfile):
+            elif (dep.image.from_ is None and
+                  isinstance(dep.image.provision_with, Dockerfile)):
                 parent = None
             else:
                 raise TypeError(repr(dep.image.from_))

@@ -157,7 +157,8 @@ class Builder(object):
                     return subprocess.call(['ansible-playbook',
                                             '-i', inv_file.name,
                                             pb_file.name])
-                exit_code = yield from self.loop.run_in_executor(None, call_ansible)
+                exit_code = yield from self.loop.run_in_executor(None,
+                                                                 call_ansible)
                 if exit_code:
                     return False
 

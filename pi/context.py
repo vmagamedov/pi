@@ -1,17 +1,16 @@
 import asyncio
 
-from .utils import cached_property, search_container
-from .types import DockerImage
+from operator import attrgetter
+
+from .utils import cached_property, SequenceMap
 
 
 class Context:
 
     def __init__(self, layers, services):
         self.loop = asyncio.get_event_loop()
-        self.layers = layers
-        self.services = services
-        self._layers_map = {l.name: l for l in layers}
-        self._services_map = {s.name: s for s in services}
+        self.layers = SequenceMap(layers, attrgetter('name'))
+        self.services = SequenceMap(services, attrgetter('name'))
 
     @cached_property
     def client(self):
@@ -25,33 +24,9 @@ class Context:
 
         return AsyncClient(loop=asyncio.get_event_loop())
 
-    def require_image(self, image):
-        if not isinstance(image, DockerImage):
-            layer = self._layers_map[image]
-            image = layer.docker_image()
-        # check and autoload image
-        return image
-
-    def ensure_running(self, service_names):
-        mapping = {s.name: s for s in self.services}
-        services = [mapping[name] for name in service_names]
-        containers = self.client.containers(all=True)
-        hosts = {}
-        for service in services:
-            label = 'pi-{}'.format(service.name)
-            container = next(search_container(label, containers), None)
-            if container is None:
-                raise RuntimeError('Service {} is not running'
-                                   .format(service.name))
-            if container['State'] != 'running':
-                assert False, 'TODO: auto-start'
-            ip = container['NetworkSettings']['Networks']['bridge']['IPAddress']
-            hosts[service.name] = ip
-        return hosts
-
     def layers_path(self, name):
         path = []
-        parent = self._layers_map[name]
+        parent = self.layers.get(name)
         while parent is not None:
             path.append(parent)
             parent = path[-1].parent

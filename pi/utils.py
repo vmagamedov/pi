@@ -53,3 +53,22 @@ def search_container(label, containers):
     for container in containers:
         if label in container['Labels']:
             yield container
+
+
+_unknown = object()
+
+
+class SequenceMap:
+
+    def __init__(self, items, key):
+        self._items = list(items)
+        self._items_map = {key(i): i for i in items}
+
+    def get(self, key, default=_unknown):
+        value = self._items_map.get(key, default)
+        if value is _unknown:
+            raise KeyError('Key {!r} not found'.format(key))
+        return value
+
+    def __iter__(self):
+        return iter(self._items)
