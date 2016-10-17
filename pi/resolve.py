@@ -1,5 +1,5 @@
 import logging
-from enum import Enum
+
 from asyncio import Queue, coroutine
 from itertools import chain
 from collections import defaultdict
@@ -8,6 +8,7 @@ from ._requires import attr
 
 from .types import DockerImage, Dockerfile
 from .build import Builder
+from .actors import MessageType
 
 
 log = logging.getLogger(__name__)
@@ -64,11 +65,10 @@ class ImagesCollector:
             self.visit(self._services.get(service_name))
 
 
-class Result(Enum):
-    pull_done = 1
-    pull_failed = 2
-    build_done = 3
-    build_failed = 4
+PULL_DONE = MessageType('PULL_DONE')
+PULL_FAILED = MessageType('PULL_FAILED')
+BUILD_DONE = MessageType('BUILD_DONE')
+BUILD_FAILED = MessageType('BUILD_FAILED')
 
 
 @coroutine
@@ -76,7 +76,7 @@ def pull_worker(queue, result_queue):
     while True:
         dep = yield from queue.get()
         print('pull >>>', dep)
-        yield from result_queue.put((Result.pull_failed, dep))
+        yield from result_queue.put((PULL_FAILED, dep))
 
 
 @coroutine
@@ -89,25 +89,32 @@ def build_worker(client, async_client, layers, queue, result_queue, *, loop):
             result = yield from builder.visit(dep.image.provision_with)
         except Exception:
             log.exception('Failed to build image')
-            yield from result_queue.put((Result.build_failed, dep))
+            yield from result_queue.put((BUILD_FAILED, dep))
         else:
-            status = Result.build_done if result else Result.build_failed
+            status = BUILD_DONE if result else BUILD_FAILED
             yield from result_queue.put((status, dep))
 
 
 def build_deps_map(plain_deps):
     deps_set = set(plain_deps)
-    images_mapping = {d.image.name: d for d in plain_deps
-                      if d.image is not None}
+    image_to_dep_map = {d.image.name: d for d in plain_deps
+                        if d.image is not None}
 
     deps = defaultdict(set)
 
     for dep in plain_deps:
         if dep.image is not None:
             if isinstance(dep.image.from_, str):
-                parent = images_mapping[dep.image.from_]
+                if dep.image.from_ in image_to_dep_map:
+                    parent = image_to_dep_map[dep.image.from_]
+                else:
+                    parent = None  # image already exists
             elif isinstance(dep.image.from_, DockerImage):
-                parent = Dep(None, dep.image.from_)
+                from_dep = Dep(None, dep.image.from_)
+                if from_dep in deps_set:
+                    parent = from_dep
+                else:
+                    parent = None  # image already exists
             elif (dep.image.from_ is None and
                   isinstance(dep.image.provision_with, Dockerfile)):
                 parent = None
@@ -189,10 +196,10 @@ def resolve(client, async_client, layers, services, obj, *, loop,
 
             result, image = yield from result_queue.get()
 
-            if result is Result.pull_done:
+            if result is PULL_DONE:
                 mark_done(deps_map, in_work, image)
 
-            elif result is Result.pull_failed:
+            elif result is PULL_FAILED:
                 if build:
                     yield from build_queue.put(image)
                 else:
@@ -200,10 +207,10 @@ def resolve(client, async_client, layers, services, obj, *, loop,
                     if fail_fast:
                         deps_map.clear()
 
-            elif result is Result.build_done:
+            elif result is BUILD_DONE:
                 mark_done(deps_map, in_work, image)
 
-            elif result is Result.build_failed:
+            elif result is BUILD_FAILED:
                 failed.extend(mark_failed(deps_map, in_work, image))
                 if fail_fast:
                     deps_map.clear()
