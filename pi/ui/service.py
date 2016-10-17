@@ -1,37 +1,15 @@
 import sys
 
-from ._requires import click
-from ._requires.tabulate import tabulate
+from .._requires import click
+from .._requires.tabulate import tabulate
 
-from .run import start
-from .utils import search_container
-from .types import Service, DockerImage, LocalPath, Mode
-from .images import get_docker_image
-from .actors import init
-from .console import pretty
-
-
-def ensure_running(client, services):
-    containers = client.containers(all=True)
-    hosts = {}
-    for service in services:
-        label = 'pi-{}'.format(service.name)
-        container = next(search_container(label, containers), None)
-        if container is None:
-            raise RuntimeError('Service {} is not running'
-                               .format(service.name))
-        if container['State'] != 'running':
-            assert False, 'TODO: auto-start'
-        ip = container['NetworkSettings']['Networks']['bridge']['IPAddress']
-        hosts[service.name] = ip
-    return hosts
-
-
-def get_volumes(volumes):
-    if volumes is not None:
-        return volumes
-    else:
-        return [LocalPath('.', '.', Mode.RW)]
+from ..run import start
+from ..utils import search_container
+from ..types import DockerImage
+from ..images import get_docker_image
+from ..actors import init
+from ..console import pretty
+from ..services import get_volumes
 
 
 @click.pass_obj
@@ -119,11 +97,6 @@ def _status_callback(ctx):
         rows.append([service.name, status, image])
     click.echo(tabulate(rows, headers=['Service name', 'Status',
                                        'Docker image']))
-
-
-def get_services(config):
-    # TODO: validate services definition (different ports)
-    return [i for i in config if isinstance(i, Service)]
 
 
 def create_service_cli(services):

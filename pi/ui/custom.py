@@ -1,18 +1,18 @@
 import sys
 import shlex
 
-from ._requires import click
-from ._requires import jinja2
+from .._requires import click
+from .._requires import jinja2
 
-from ._res import DUMB_INIT_LOCAL_PATH
+from .._res import DUMB_INIT_LOCAL_PATH
 
-from .run import run
-from .types import CommandType, LocalPath, Mode
-from .actors import init
-from .images import get_docker_image
-from .console import config_tty
-from .resolve import resolve
-from .service import ensure_running
+from ..run import run
+from ..types import CommandType, LocalPath, Mode
+from ..actors import init
+from ..images import get_docker_image
+from ..console import config_tty
+from ..resolve import resolve
+from ..services import ensure_running
 
 
 DUMB_INIT_REMOTE_PATH = '/.pi-dumb-init'
