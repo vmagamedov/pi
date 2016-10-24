@@ -6,7 +6,7 @@ from asyncio import Queue, CancelledError
 
 from ._requires import click
 
-from .client import APIError
+from .client import APIError, NotFound
 from .actors import receive, send, MessageType, terminate
 
 
@@ -121,15 +121,17 @@ def start(self, client, image, command, *, entrypoint=None,
                                  volumes=container_volumes,
                                  entrypoint=entrypoint,
                                  working_dir=work_dir,
-                                 labels=labels)
+                                 labels=labels,
+                                 host_config=client.create_host_config(
+                                     binds=container_volume_binds,
+                                     port_bindings=container_port_binds,
+                                     extra_hosts=hosts
+                                 ))
     except APIError as e:
         click.echo(e.explanation)
         return
     try:
-        yield from self.exec(client.start, c,
-                             binds=container_volume_binds,
-                             port_bindings=container_port_binds,
-                             extra_hosts=hosts)
+        yield from self.exec(client.start, c)
     except APIError as e:
         click.echo(e.explanation)
         yield from self.exec(client.remove_container, c, v=True, force=True)
@@ -139,7 +141,10 @@ def start(self, client, image, command, *, entrypoint=None,
 
 def resize(self, client, container):
     width, height = click.get_terminal_size()
-    yield from self.exec(client.resize, container, height, width)
+    try:
+        yield from self.exec(client.resize, container, height, width)
+    except NotFound as e:
+        log.debug('Failed to resize terminal: %s', e)
 
 
 def attach(self, client, container, input_fd, *, wait_exit=3):
@@ -156,15 +161,18 @@ def attach(self, client, container, input_fd, *, wait_exit=3):
         output_proc = self.spawn(output)
         socket_reader_proc = self.spawn(socket_reader, sock, output_proc)
 
+        exit_code = None
         try:
-            yield from self.wait([socket_reader_proc])
+            exit_code = yield from self.exec(client.wait, container)
         except CancelledError:
             yield from self.exec(client.stop, container, timeout=wait_exit)
             yield from terminate(socket_reader_proc)
 
         yield from terminate(output_proc)
         yield from terminate(input_proc)
+        yield from terminate(socket_reader_proc)
         yield from terminate(socket_writer_proc)
+        return exit_code
 
 
 def run(self, client, input_fd, image, command, *,
@@ -176,9 +184,10 @@ def run(self, client, input_fd, image, command, *,
         return
     try:
         yield from resize(self, client, c)
-        yield from attach(self, client, c, input_fd, wait_exit=wait_exit)
-
-        exit_code = yield from self.exec(client.wait, c)
+        exit_code = yield from attach(self, client, c, input_fd,
+                                      wait_exit=wait_exit)
+        if exit_code is None:
+            exit_code = yield from self.exec(client.wait, c)
         return exit_code
 
     finally:

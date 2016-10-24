@@ -1,12 +1,13 @@
 six==1.10.0
 click==6.6
 typing==3.5.2.2
-pyyaml==3.11
+pyyaml==3.12
 jinja2==2.8
-requests==2.10.0
-docker-py==1.8.1
+requests==2.11.1
+docker-py==1.10.4
+docker-pycreds==0.2.1
 markupsafe==0.23
 websocket-client==0.37.0
 backports.ssl_match_hostname==3.5.0.1
 tabulate==0.7.5
-attrs==16.1.0
+attrs==16.2.0

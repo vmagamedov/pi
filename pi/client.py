@@ -6,9 +6,11 @@ from asyncio import coroutine
 from functools import partial
 
 from ._requires.docker import Client, errors
+from ._requires.docker.utils import kwargs_from_env
 
 
 APIError = errors.APIError
+NotFound = errors.NotFound
 
 log = logging.getLogger(__name__)
 
@@ -51,13 +53,13 @@ def echo_download_progress(output):
 
 
 def get_client():
-    return Client.from_env()
+    return Client(version='auto', **kwargs_from_env())
 
 
 class AsyncClient:
 
     def __init__(self, *, loop):
-        self._client = Client.from_env()
+        self._client = Client(version='auto', **kwargs_from_env())
         self._loop = loop
 
     @coroutine
