@@ -6,8 +6,10 @@
   name: app echo
   description: Echo greeting
   image: app.env.ansible
+  environ:
+    VAR: World
   params:
-    - !Argument {name: name, default: World}
+    - !Argument {name: name, default: $VAR}
   shell: echo "Hello {{name}}!!!"
 
 - !SubCommand

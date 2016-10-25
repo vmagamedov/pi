@@ -1,7 +1,7 @@
 from enum import Enum
 
 from ._requires import attr
-from ._requires.typing import Optional, Union, Any, Sequence
+from ._requires.typing import Optional, Union, Any, Sequence, Mapping
 
 from .utils import ImmutableDict
 
@@ -181,6 +181,7 @@ class Service(MappingConstruct):
     image = attr.ib()  # type: Union[str, DockerImage]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
+    environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
@@ -230,6 +231,7 @@ class ShellCommand(CommandType, MappingConstruct):
     params = attr.ib(default=None)  # type: Optional[Sequence[ParameterType]]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
+    environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
     raw_input = attr.ib(default=None)  # type: Optional[bool]
     requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
     description = attr.ib(default=None)  # type: Optional[str]
@@ -250,6 +252,7 @@ class SubCommand(CommandType, MappingConstruct):
     call = attr.ib()  # type: Union[str, Sequence[str]]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
+    environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
     raw_input = attr.ib(default=None)  # type: Optional[bool]
     requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
     description = attr.ib(default=None)  # type: Optional[str]

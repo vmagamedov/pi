@@ -66,11 +66,11 @@ def render_template(template, params):
 
 
 def execute(client, image, command, *, volumes=None, ports=None,
-            work_dir=None, hosts=None, raw_input=False):
+            environ=None, work_dir=None, hosts=None, raw_input=False):
     with config_tty(raw_input) as fd:
         return init(run, client, fd, image, command,
-                    volumes=volumes, ports=ports, work_dir=work_dir,
-                    hosts=hosts)
+                    volumes=volumes, ports=ports, environ=environ,
+                    work_dir=work_dir, hosts=hosts)
 
 
 class _ParameterCreator:
@@ -150,6 +150,7 @@ class _CommandCreator:
             exit_code = execute(ctx.client, docker_image, cmd,
                                 volumes=volumes,
                                 ports=command.ports,
+                                environ=command.environ,
                                 work_dir=get_work_dir(command.volumes),
                                 hosts=hosts,
                                 raw_input=command.raw_input)
@@ -178,6 +179,7 @@ class _CommandCreator:
                                 call + args,
                                 volumes=get_volumes(command.volumes),
                                 ports=command.ports,
+                                environ=command.environ,
                                 work_dir=get_work_dir(command.volumes),
                                 hosts=hosts,
                                 raw_input=command.raw_input)

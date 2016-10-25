@@ -32,8 +32,11 @@ def _start_callback(ctx, name):
             raise NotImplementedError(container['State'])
     else:
         docker_image = get_docker_image(ctx.layers, service.image)
-        init(start, ctx.client, docker_image, None, label=label,
-             volumes=get_volumes(service.volumes), ports=service.ports)
+        init(start, ctx.client, docker_image, None,
+             volumes=get_volumes(service.volumes),
+             ports=service.ports,
+             environ=service.environ,
+             label=label)
         click.echo('Service started')
 
 

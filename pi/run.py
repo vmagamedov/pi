@@ -99,7 +99,8 @@ def _port_binds(ports):
 
 
 def start(self, client, image, command, *, entrypoint=None,
-          volumes=None, ports=None, work_dir=None, hosts=None, label=None):
+          volumes=None, ports=None, environ=None, work_dir=None, hosts=None,
+          label=None):
     volumes = volumes or []
     container_volumes = _VolumeBinds.translate_volumes(volumes)
     container_volume_binds = _VolumeBinds.translate_binds(volumes)
@@ -118,6 +119,7 @@ def start(self, client, image, command, *, entrypoint=None,
                                  stdin_open=True,
                                  tty=True,
                                  ports=container_ports,
+                                 environment=environ,
                                  volumes=container_volumes,
                                  entrypoint=entrypoint,
                                  working_dir=work_dir,
@@ -176,10 +178,11 @@ def attach(self, client, container, input_fd, *, wait_exit=3):
 
 
 def run(self, client, input_fd, image, command, *,
-        volumes=None, ports=None, work_dir=None, hosts=None,
+        volumes=None, ports=None, environ=None, work_dir=None, hosts=None,
         wait_exit=3):
     c = yield from start(self, client, image, command, volumes=volumes,
-                         ports=ports, work_dir=work_dir, hosts=hosts)
+                         ports=ports, environ=environ, work_dir=work_dir,
+                         hosts=hosts)
     if c is None:
         return
     try:
