@@ -1,7 +1,7 @@
 import math
 import shlex
 
-from typing import Sequence
+from collections import Sequence
 
 
 def format_size(value):
