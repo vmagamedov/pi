@@ -1,5 +1,4 @@
 import sys
-import shlex
 
 from .._requires import click
 from .._requires import jinja2
@@ -8,6 +7,7 @@ from .._res import DUMB_INIT_LOCAL_PATH
 
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
+from ..utils import sh_to_list
 from ..actors import init
 from ..images import get_docker_image
 from ..console import config_tty
@@ -146,7 +146,7 @@ class _CommandCreator:
                                      DUMB_INIT_REMOTE_PATH))
 
             cmd = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
-                   render_template(command.shell, kw)]
+                   render_template(command.eval, kw)]
 
             exit_code = execute(ctx.client, docker_image, cmd,
                                 volumes=volumes,
@@ -165,10 +165,7 @@ class _CommandCreator:
                              short_help=short_help)
 
     def visit_subcommand(self, command):
-        if isinstance(command.call, str):
-            call = shlex.split(command.call)
-        else:
-            call = command.call
+        exec_ = sh_to_list(command.exec)
 
         @click.pass_obj
         def cb(ctx, args):
@@ -178,7 +175,7 @@ class _CommandCreator:
             ensure_network(ctx.client, ctx.network)
 
             exit_code = execute(ctx.client, docker_image,
-                                call + args,
+                                exec_ + args,
                                 volumes=get_volumes(command.volumes),
                                 ports=command.ports,
                                 environ=command.environ,

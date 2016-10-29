@@ -10,17 +10,17 @@
     VAR: World
   params:
     - !Argument {name: name, default: $VAR}
-  shell: echo "Hello {{name}}!!!"
+  eval: echo "Hello {{name}}!!!"
 
 - !SubCommand
   name: ping
   image: !DockerImage ubuntu:xenial
-  call: ping
+  exec: ping
 
 - !SubCommand
   name: shell
   image: !DockerImage ubuntu:xenial
-  call: /bin/bash
+  exec: /bin/bash
   raw-input: true
   ports:
     - !Expose { port: 8000, as: 8080 }
@@ -53,4 +53,4 @@
 - !SubCommand
   name: test
   image: app.env.ansible
-  call: echo
+  exec: echo

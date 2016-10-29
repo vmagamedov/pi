@@ -1,4 +1,7 @@
 import math
+import shlex
+
+from typing import Sequence
 
 
 def format_size(value):
@@ -72,3 +75,11 @@ class SequenceMap:
 
     def __iter__(self):
         return iter(self._items)
+
+
+def sh_to_list(args):
+    if isinstance(args, str):
+        return shlex.split(args)
+    else:
+        assert isinstance(args, Sequence)
+        return args

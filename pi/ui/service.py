@@ -4,7 +4,7 @@ from .._requires import click
 from .._requires.tabulate import tabulate
 
 from ..run import start
-from ..utils import search_container
+from ..utils import search_container, sh_to_list
 from ..types import DockerImage
 from ..images import get_docker_image
 from ..actors import init
@@ -32,9 +32,12 @@ def _start_callback(ctx, name):
         else:
             raise NotImplementedError(container['State'])
     else:
+        exec_ = sh_to_list(service.exec) if service.exec else None
+        args = sh_to_list(service.args) if service.args else None
         docker_image = get_docker_image(ctx.layers, service.image)
         ensure_network(ctx.client, ctx.network)
-        init(start, ctx.client, docker_image, None,
+        init(start, ctx.client, docker_image, args,
+             entrypoint=exec_,
              volumes=get_volumes(service.volumes),
              ports=service.ports,
              environ=service.environ,

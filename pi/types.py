@@ -183,6 +183,8 @@ class Service(MappingConstruct):
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
+    exec = attr.ib(default=None)  # type: Union[str, Sequence[str]]
+    args = attr.ib(default=None)  # type: Union[str, Sequence[str]]
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
@@ -228,7 +230,7 @@ class ShellCommand(CommandType, MappingConstruct):
 
     name = attr.ib()  # type: str
     image = attr.ib()  # type: Union[str, DockerImage]
-    shell = attr.ib()  # type: str
+    eval = attr.ib()  # type: str
     params = attr.ib(default=None)  # type: Optional[Sequence[ParameterType]]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
@@ -250,7 +252,7 @@ class SubCommand(CommandType, MappingConstruct):
 
     name = attr.ib()  # type: str
     image = attr.ib()  # type: Union[str, DockerImage]
-    call = attr.ib()  # type: Union[str, Sequence[str]]
+    exec = attr.ib()  # type: Union[str, Sequence[str]]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
