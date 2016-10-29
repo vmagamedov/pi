@@ -8,8 +8,9 @@ from ..utils import search_container
 from ..types import DockerImage
 from ..images import get_docker_image
 from ..actors import init
+from ..network import ensure_network
 from ..console import pretty
-from ..services import get_volumes
+from ..services import get_volumes, service_label
 
 
 @click.pass_obj
@@ -19,7 +20,7 @@ def _start_callback(ctx, name):
         click.echo('Unknown service name: {}'.format(name))
         sys.exit(-1)
 
-    label = 'pi-{}'.format(service.name)
+    label = service_label(ctx.namespace, service)
     containers = ctx.client.containers(all=True)
     container = next(search_container(label, containers), None)
     if container is not None:
@@ -32,10 +33,13 @@ def _start_callback(ctx, name):
             raise NotImplementedError(container['State'])
     else:
         docker_image = get_docker_image(ctx.layers, service.image)
+        ensure_network(ctx.client, ctx.network)
         init(start, ctx.client, docker_image, None,
              volumes=get_volumes(service.volumes),
              ports=service.ports,
              environ=service.environ,
+             network=ctx.network,
+             network_alias=service.name,
              label=label)
         click.echo('Service started')
 
@@ -47,7 +51,7 @@ def _stop_callback(ctx, name):
         click.echo('Unknown service name: {}'.format(name))
         sys.exit(-1)
 
-    label = 'pi-{}'.format(service.name)
+    label = service_label(ctx.namespace, service)
     all_containers = ctx.client.containers(all=True)
     containers = list(search_container(label, all_containers))
     if not containers:
@@ -78,7 +82,7 @@ def _status_callback(ctx):
 
     rows = []
     for service in ctx.services:
-        label = 'pi-{}'.format(service.name)
+        label = service_label(ctx.namespace, service)
         if label in running:
             status = pretty('{_green}running{_r}')
             image = images[label]

@@ -99,8 +99,8 @@ def _port_binds(ports):
 
 
 def start(self, client, image, command, *, entrypoint=None,
-          volumes=None, ports=None, environ=None, work_dir=None, hosts=None,
-          label=None):
+          volumes=None, ports=None, environ=None, work_dir=None,
+          network=None, network_alias=None, label=None):
     volumes = volumes or []
     container_volumes = _VolumeBinds.translate_volumes(volumes)
     container_volume_binds = _VolumeBinds.translate_binds(volumes)
@@ -112,23 +112,32 @@ def start(self, client, image, command, *, entrypoint=None,
     work_dir = os.path.abspath(work_dir) if work_dir is not None else None
     labels = [label] if label is not None else []
 
+    host_config = client.create_host_config(
+        binds=container_volume_binds,
+        port_bindings=container_port_binds,
+        network_mode=network,
+    )
+    networking_config = None
+    if network_alias is not None:
+        networking_config = client.create_networking_config(endpoints_config={
+            network: {'Aliases': [network_alias]},
+        })
     try:
-        c = yield from self.exec(client.create_container,
-                                 image=image.name,
-                                 command=command,
-                                 stdin_open=True,
-                                 tty=True,
-                                 ports=container_ports,
-                                 environment=environ,
-                                 volumes=container_volumes,
-                                 entrypoint=entrypoint,
-                                 working_dir=work_dir,
-                                 labels=labels,
-                                 host_config=client.create_host_config(
-                                     binds=container_volume_binds,
-                                     port_bindings=container_port_binds,
-                                     extra_hosts=hosts
-                                 ))
+        c = yield from self.exec(
+            client.create_container,
+            image=image.name,
+            command=command,
+            stdin_open=True,
+            tty=True,
+            ports=container_ports,
+            environment=environ,
+            volumes=container_volumes,
+            entrypoint=entrypoint,
+            working_dir=work_dir,
+            labels=labels,
+            host_config=host_config,
+            networking_config=networking_config,
+        )
     except APIError as e:
         click.echo(e.explanation)
         return
@@ -178,11 +187,11 @@ def attach(self, client, container, input_fd, *, wait_exit=3):
 
 
 def run(self, client, input_fd, image, command, *,
-        volumes=None, ports=None, environ=None, work_dir=None, hosts=None,
+        volumes=None, ports=None, environ=None, work_dir=None, network=None,
         wait_exit=3):
     c = yield from start(self, client, image, command, volumes=volumes,
                          ports=ports, environ=environ, work_dir=work_dir,
-                         hosts=hosts)
+                         network=network)
     if c is None:
         return
     try:

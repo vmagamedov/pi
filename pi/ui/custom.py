@@ -11,6 +11,7 @@ from ..types import CommandType, LocalPath, Mode
 from ..actors import init
 from ..images import get_docker_image
 from ..console import config_tty
+from ..network import ensure_network
 from ..resolve import resolve
 from ..services import ensure_running
 
@@ -66,11 +67,11 @@ def render_template(template, params):
 
 
 def execute(client, image, command, *, volumes=None, ports=None,
-            environ=None, work_dir=None, hosts=None, raw_input=False):
+            environ=None, work_dir=None, network=None, raw_input=False):
     with config_tty(raw_input) as fd:
         return init(run, client, fd, image, command,
                     volumes=volumes, ports=ports, environ=environ,
-                    work_dir=work_dir, hosts=hosts)
+                    work_dir=work_dir, network=network)
 
 
 class _ParameterCreator:
@@ -117,8 +118,7 @@ def _resolve(ctx, command):
 def _start_services(ctx, command):
     services = [ctx.services.get(name)
                 for name in command.requires or []]
-    hosts = ensure_running(ctx.client, services)
-    return hosts
+    ensure_running(ctx.client, ctx.namespace, services)
 
 
 class _CommandCreator:
@@ -138,7 +138,8 @@ class _CommandCreator:
         def cb(ctx, **kw):
             _resolve(ctx, command)
             docker_image = get_docker_image(ctx.layers, command.image)
-            hosts = _start_services(ctx, command)
+            _start_services(ctx, command)
+            ensure_network(ctx.client, ctx.network)
 
             volumes = get_volumes(command.volumes)
             volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
@@ -152,7 +153,7 @@ class _CommandCreator:
                                 ports=command.ports,
                                 environ=command.environ,
                                 work_dir=get_work_dir(command.volumes),
-                                hosts=hosts,
+                                network=ctx.network,
                                 raw_input=command.raw_input)
             sys.exit(exit_code)
 
@@ -173,7 +174,8 @@ class _CommandCreator:
         def cb(ctx, args):
             _resolve(ctx, command)
             docker_image = get_docker_image(ctx.layers, command.image)
-            hosts = _start_services(ctx, command)
+            _start_services(ctx, command)
+            ensure_network(ctx.client, ctx.network)
 
             exit_code = execute(ctx.client, docker_image,
                                 call + args,
@@ -181,7 +183,7 @@ class _CommandCreator:
                                 ports=command.ports,
                                 environ=command.environ,
                                 work_dir=get_work_dir(command.volumes),
-                                hosts=hosts,
+                                network=ctx.network,
                                 raw_input=command.raw_input)
             sys.exit(exit_code)
 

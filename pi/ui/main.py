@@ -30,4 +30,4 @@ def build_cli():
     cli = click.CommandCollection(sources=[images_cli, services_cli,
                                            commands_cli],
                                   help=meta.description)
-    cli(obj=Context(layers, services))
+    cli(obj=Context(meta, layers, services))

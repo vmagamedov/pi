@@ -61,6 +61,7 @@ class MappingConstruct:
 class Meta(MappingConstruct):
     __tag__ = '!Meta'
 
+    namespace = attr.ib(default=None)  # type: Optional[str]
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):

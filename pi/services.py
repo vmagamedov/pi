@@ -2,20 +2,20 @@ from .utils import search_container
 from .types import Service, LocalPath, Mode
 
 
-def ensure_running(client, services):
+def service_label(namespace: str, service: Service):
+    return '{}-{}'.format(namespace, service.name)
+
+
+def ensure_running(client, namespace, services):
     containers = client.containers(all=True)
-    hosts = {}
     for service in services:
-        label = 'pi-{}'.format(service.name)
+        label = service_label(namespace, service)
         container = next(search_container(label, containers), None)
         if container is None:
             raise RuntimeError('Service {} is not running'
                                .format(service.name))
         if container['State'] != 'running':
             assert False, 'TODO: auto-start'
-        ip = container['NetworkSettings']['Networks']['bridge']['IPAddress']
-        hosts[service.name] = ip
-    return hosts
 
 
 def get_volumes(volumes):
