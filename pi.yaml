@@ -2,6 +2,21 @@
   description: |
     Project command-line interface
 
+- !Image
+  name: docs
+  from: !DockerImage python:3.5.2-alpine
+  repository: reg.local/pi/docs
+  provision-with: !AnsibleTasks
+    - pip: name={{item}} executable=pip3 extra_args='--no-cache-dir'
+      with_items:
+        - sphinx==1.4.8
+        - sphinx_rtd_theme==0.1.10a0
+
+- !ShellCommand
+  name: build docs
+  image: docs
+  eval: sphinx-build -b html docs build
+
 - !ShellCommand
   name: app echo
   description: Echo greeting
