@@ -1,7 +1,3 @@
-import sys
-import json
-import logging
-
 from asyncio import coroutine
 from functools import partial
 
@@ -11,45 +7,6 @@ from ._requires.docker.utils import kwargs_from_env
 
 APIError = errors.APIError
 NotFound = errors.NotFound
-
-log = logging.getLogger(__name__)
-
-
-def echo_download_progress(output):
-    error = False
-    last_id = None
-    for line in output:
-        log.debug(line)
-        chunks = line.decode('utf-8').splitlines()
-        for chunk in chunks:
-            progress = json.loads(chunk)
-
-            error = error or 'error' in progress
-
-            progress_id = progress.get('id')
-            if last_id:
-                if progress_id == last_id:
-                    sys.stdout.write('\x1b[2K\r')
-                elif not progress_id or progress_id != last_id:
-                    sys.stdout.write('\n')
-            last_id = progress_id
-
-            if progress_id:
-                sys.stdout.write('{}: '.format(progress_id))
-            sys.stdout.write(progress.get('status') or
-                             progress.get('error') or '')
-
-            progress_bar = progress.get('progress')
-            if progress_bar:
-                sys.stdout.write(' ' + progress_bar)
-
-            if not progress_id:
-                sys.stdout.write('\n')
-            sys.stdout.flush()
-    if last_id:
-        sys.stdout.write('\n')
-        sys.stdout.flush()
-    return not error
 
 
 def get_client():
@@ -100,3 +57,9 @@ class AsyncClient:
 
     def unpause(self, *args, **kwargs):
         return self._exec(self._client.unpause, *args, **kwargs)
+
+    def pull(self, *args, **kwargs):
+        return self._exec(self._client.pull, *args, **kwargs)
+
+    def push(self, *args, **kwargs):
+        return self._exec(self._client.push, *args, **kwargs)

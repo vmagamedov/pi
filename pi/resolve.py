@@ -8,6 +8,7 @@ from ._requires import attr
 
 from .types import DockerImage, Dockerfile
 from .build import Builder
+from .images import Puller
 from .actors import MessageType
 
 
@@ -40,7 +41,7 @@ class ImagesCollector:
         pass
 
     def visit_image(self, obj):
-        pass
+        self.add(obj.name)
 
     def add(self, image):
         if isinstance(image, DockerImage):
@@ -72,11 +73,18 @@ BUILD_FAILED = MessageType('BUILD_FAILED')
 
 
 @coroutine
-def pull_worker(queue, result_queue):
+def pull_worker(client, async_client, queue, result_queue, *, loop):
+    puller = Puller(client, async_client, loop=loop)
     while True:
         dep = yield from queue.get()
-        print('pull >>>', dep)
-        yield from result_queue.put((PULL_FAILED, dep))
+        try:
+            result = yield from puller.visit(dep.docker_image)
+        except Exception:
+            log.exception('Failed to pull image')
+            yield from result_queue.put((PULL_FAILED, dep))
+        else:
+            status = PULL_DONE if result else PULL_FAILED
+            yield from result_queue.put((status, dep))
 
 
 @coroutine
@@ -181,7 +189,9 @@ def resolve(client, async_client, layers, services, obj, *, loop,
     build_queue = Queue()
     result_queue = Queue()
 
-    puller_task = loop.create_task(pull_worker(pull_queue, result_queue))
+    puller_task = loop.create_task(pull_worker(client, async_client,
+                                               pull_queue, result_queue,
+                                               loop=loop))
     builder_task = loop.create_task(build_worker(client, async_client, layers,
                                                  build_queue, result_queue,
                                                  loop=loop))

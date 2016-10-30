@@ -88,7 +88,11 @@ class Meta(MappingConstruct):
 @attr.s
 class DockerImage(ScalarConstruct):
     __tag__ = '!DockerImage'
+
     name = attr.ib()
+
+    def accept(self, visitor):
+        return visitor.visit_dockerimage(self)
 
 
 class ProvisionType:

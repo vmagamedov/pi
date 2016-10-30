@@ -1,5 +1,8 @@
+import sys
 import hashlib
 import binascii
+
+from asyncio import coroutine
 
 from .types import DockerImage, Image
 
@@ -99,3 +102,87 @@ def construct_layers(config):
         layers[name] = Layer(image, parent=parent)
 
     return list(layers.values())
+
+
+def _echo_download_progress(output):
+    error = False
+    last_id = None
+    for progress in output:
+        error = error or 'error' in progress
+
+        progress_id = progress.get('id')
+        if last_id:
+            if progress_id == last_id:
+                sys.stdout.write('\x1b[2K\r')
+            elif not progress_id or progress_id != last_id:
+                sys.stdout.write('\n')
+        last_id = progress_id
+
+        if progress_id:
+            sys.stdout.write('{}: '.format(progress_id))
+        sys.stdout.write(progress.get('status') or
+                         progress.get('error') or '')
+
+        progress_bar = progress.get('progress')
+        if progress_bar:
+            sys.stdout.write(' ' + progress_bar)
+
+        if not progress_id:
+            sys.stdout.write('\n')
+        sys.stdout.flush()
+    if last_id:
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+    return not error
+
+
+class Puller:
+
+    def __init__(self, client, async_client, *, loop):
+        self.client = client
+        self.async_client = async_client
+        self.loop = loop
+
+    def visit(self, obj):
+        return obj.accept(self)
+
+    @coroutine
+    def visit_dockerimage(self, obj):
+        from .client import APIError
+
+        try:
+            output = yield from self.async_client.pull(obj.name, stream=True,
+                                                       decode=True)
+        except APIError as e:
+            if e.response.status_code == 404:
+                return False
+            raise
+        else:
+            success = yield from self.loop.run_in_executor(
+                None,
+                _echo_download_progress,
+                output,
+            )
+            return success
+
+
+class Pusher:
+
+    def __init__(self, client, async_client, *, loop):
+        self.client = client
+        self.async_client = async_client
+        self.loop = loop
+
+    def visit(self, obj):
+        return obj.accept(self)
+
+    @coroutine
+    def visit_dockerimage(self, obj):
+        output = yield from self.async_client.push(obj.name, stream=True,
+                                                   decode=True)
+        success = yield from self.loop.run_in_executor(
+            None,
+            _echo_download_progress,
+            output,
+        )
+        return success

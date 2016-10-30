@@ -7,41 +7,33 @@ from collections import Counter, namedtuple
 
 from ..run import run
 from ..types import DockerImage, Mode, LocalPath
-from ..build import Builder
 from ..utils import format_size
+from ..images import Puller, Pusher
 from ..actors import init
 from ..console import pretty, config_tty
+from ..resolve import resolve
 
 from .._requires import click
-
-from ..client import echo_download_progress
 
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
 
 def _build_image(ctx, *, name):
-    layers = ctx.layers_path(name)
-
-    # check if base image exists
-    base_image = layers[0].image.from_
-    if base_image is not None:
-        if not ctx.image_exists(base_image):
-            if not ctx.image_pull(base_image, echo_download_progress):
-                sys.exit(1)
-
-    for layer in layers:
-        docker_image = layer.docker_image()
-        if not ctx.image_exists(docker_image):
-            if not ctx.image_pull(docker_image, echo_download_progress):
-                builder = Builder(ctx.client, ctx.async_client, layer,
-                                  loop=ctx.loop)
-                build_coro = builder.visit(layer.image.provision_with)
-                if not ctx.loop.run_until_complete(build_coro):
-                    sys.exit(1)
-        else:
-            click.echo('Already exists: {}'
-                       .format(docker_image.name))
+    image = ctx.layers.get(name).image
+    failed = ctx.loop.run_until_complete(resolve(
+        ctx.client,
+        ctx.async_client,
+        ctx.layers,
+        ctx.services,
+        image,
+        loop=ctx.loop,
+        pull=True,
+        build=True,
+    ))
+    if failed:
+        click.echo('Failed to build image {}'.format(name))
+        sys.exit(1)
 
 
 @click.command('list', help='List known images')
@@ -89,7 +81,9 @@ def _get_image(layers, name):
 @click.pass_obj
 def image_pull(ctx, name):
     image = _get_image(ctx.layers, name)
-    if not ctx.image_pull(image, echo_download_progress):
+    success = ctx.loop.run_until_complete(Puller(ctx.client, ctx.async_client,
+                                                 loop=ctx.loop).visit(image))
+    if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
 
@@ -99,7 +93,9 @@ def image_pull(ctx, name):
 @click.pass_obj
 def image_push(ctx, name):
     image = _get_image(ctx.layers, name)
-    if not ctx.image_push(image, echo_download_progress):
+    success = ctx.loop.run_until_complete(Pusher(ctx.client, ctx.async_client,
+                                                 loop=ctx.loop).visit(image))
+    if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)
 

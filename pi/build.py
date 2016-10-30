@@ -51,26 +51,20 @@ def _pi_python_tar():
     return f
 
 
-def echo_build_progress(client, output):
+def _echo_build_progress(client, output):
     error = False
     latest_container = None
     try:
-        for line in output:
-            log.debug(line)
-            # FIXME: There is a bug in docker or docker-py: possibility
-            # of more than one chunks in one line.
-            chunks = line.decode('utf-8').splitlines()
-            for chunk in chunks:
-                status = json.loads(chunk)
-                if 'stream' in status:
-                    sys.stdout.write(status['stream'])
-                    match = re.search(u'Running in ([0-9a-f]+)',
-                                      status['stream'])
-                    if match:
-                        latest_container = match.group(1)
-                elif 'error' in status:
-                    error = True
-                    sys.stdout.write(status['error'])
+        for status in output:
+            if 'stream' in status:
+                sys.stdout.write(status['stream'])
+                match = re.search(u'Running in ([0-9a-f]+)',
+                                  status['stream'])
+                if match:
+                    latest_container = match.group(1)
+            elif 'error' in status:
+                error = True
+                sys.stdout.write(status['error'])
         return not error
     except BaseException as original_exc:
         try:
@@ -117,10 +111,11 @@ class Builder(object):
             fileobj=io.BytesIO(docker_file),
             rm=True,
             stream=True,
+            decode=True,
         )
         result = yield from self.loop.run_in_executor(
             None,
-            echo_build_progress,
+            _echo_build_progress,
             self.client,
             output,
         )
