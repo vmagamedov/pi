@@ -188,10 +188,10 @@ def attach(self, client, container, input_fd, *, wait_exit=3):
 
 def run(self, client, input_fd, image, command, *,
         volumes=None, ports=None, environ=None, work_dir=None, network=None,
-        wait_exit=3):
+        network_alias=None, wait_exit=3):
     c = yield from start(self, client, image, command, volumes=volumes,
                          ports=ports, environ=environ, work_dir=work_dir,
-                         network=network)
+                         network=network, network_alias=network_alias)
     if c is None:
         return
     try:

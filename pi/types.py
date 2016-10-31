@@ -247,6 +247,7 @@ class ShellCommand(CommandType, MappingConstruct):
     __tag__ = '!ShellCommand'
     __rename_to__ = ImmutableDict([
         ('raw-input', 'raw_input'),
+        ('network-name', 'network_name'),
     ])
 
     name = attr.ib()  # type: str
@@ -258,6 +259,7 @@ class ShellCommand(CommandType, MappingConstruct):
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
     raw_input = attr.ib(default=None)  # type: Optional[bool]
     requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
+    network_name = attr.ib(default=None)  # type: Optional[str]
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
@@ -269,6 +271,7 @@ class SubCommand(CommandType, MappingConstruct):
     __tag__ = '!SubCommand'
     __rename_to__ = ImmutableDict([
         ('raw-input', 'raw_input'),
+        ('network-name', 'network_name'),
     ])
 
     name = attr.ib()  # type: str
@@ -279,6 +282,7 @@ class SubCommand(CommandType, MappingConstruct):
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
     raw_input = attr.ib(default=None)  # type: Optional[bool]
     requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
+    network_name = attr.ib(default=None)  # type: Optional[str]
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):

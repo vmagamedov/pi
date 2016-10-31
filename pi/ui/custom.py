@@ -67,11 +67,13 @@ def render_template(template, params):
 
 
 def execute(client, image, command, *, volumes=None, ports=None,
-            environ=None, work_dir=None, network=None, raw_input=False):
+            environ=None, work_dir=None, network=None, network_alias=None,
+            raw_input=False):
     with config_tty(raw_input) as fd:
         return init(run, client, fd, image, command,
                     volumes=volumes, ports=ports, environ=environ,
-                    work_dir=work_dir, network=network)
+                    work_dir=work_dir, network=network,
+                    network_alias=network_alias)
 
 
 class _ParameterCreator:
@@ -154,6 +156,7 @@ class _CommandCreator:
                                 environ=command.environ,
                                 work_dir=get_work_dir(command.volumes),
                                 network=ctx.network,
+                                network_alias=command.network_name,
                                 raw_input=command.raw_input)
             sys.exit(exit_code)
 
@@ -181,6 +184,7 @@ class _CommandCreator:
                                 environ=command.environ,
                                 work_dir=get_work_dir(command.volumes),
                                 network=ctx.network,
+                                network_alias=command.network_name,
                                 raw_input=command.raw_input)
             sys.exit(exit_code)
 
