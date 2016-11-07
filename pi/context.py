@@ -2,7 +2,7 @@ import asyncio
 
 from operator import attrgetter
 
-from .utils import cached_property, SequenceMap
+from .utils import cached_property, SequenceMap, async_func
 
 
 class Context:
@@ -35,3 +35,15 @@ class Context:
         from .client import AsyncClient
 
         return AsyncClient(loop=self.loop)
+
+
+def async_cmd(func):
+
+    @async_func
+    def async_wrapper(ctx, *args, loop, **kwargs):
+        yield from func(ctx, *args, **kwargs)
+
+    def sync_wrapper(ctx, *args, **kwargs):
+        async_wrapper(ctx, *args, loop=ctx.loop, **kwargs)
+
+    return sync_wrapper

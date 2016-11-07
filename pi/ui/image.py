@@ -11,6 +11,7 @@ from ..utils import format_size
 from ..images import Puller, Pusher
 from ..actors import init
 from ..console import pretty, config_tty
+from ..context import async_cmd
 from ..resolve import resolve
 
 from .._requires import click
@@ -21,7 +22,7 @@ BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
 def _build_image(ctx, *, name):
     image = ctx.layers.get(name).image
-    failed = ctx.loop.run_until_complete(resolve(
+    failed = yield from resolve(
         ctx.async_client,
         ctx.layers,
         ctx.services,
@@ -29,7 +30,7 @@ def _build_image(ctx, *, name):
         loop=ctx.loop,
         pull=True,
         build=True,
-    ))
+    )
     if failed:
         click.echo('Failed to build image {}'.format(name))
         sys.exit(1)
@@ -78,10 +79,10 @@ def _get_image(layers, name):
 @click.command('pull', help='Pull image version')
 @click.argument('name')
 @click.pass_obj
+@async_cmd
 def image_pull(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = ctx.loop.run_until_complete(Puller(ctx.async_client,
-                                                 loop=ctx.loop).visit(image))
+    success = yield from Puller(ctx.async_client, loop=ctx.loop).visit(image)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
@@ -90,10 +91,10 @@ def image_pull(ctx, name):
 @click.command('push', help='Push image version')
 @click.argument('name')
 @click.pass_obj
+@async_cmd
 def image_push(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = ctx.loop.run_until_complete(Pusher(ctx.async_client,
-                                                 loop=ctx.loop).visit(image))
+    success = yield from Pusher(ctx.async_client, loop=ctx.loop).visit(image)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)
@@ -178,6 +179,7 @@ def create_images_cli(layers):
     build_group = click.Group('build', help=build_help)
     for layer in layers:
         callback = partial(_build_image, name=layer.name)
+        callback = async_cmd(callback)
         callback = click.pass_obj(callback)
         cmd = click.Command(layer.name, callback=callback)
         build_group.add_command(cmd)

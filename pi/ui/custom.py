@@ -7,7 +7,7 @@ from .._res import DUMB_INIT_LOCAL_PATH
 
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
-from ..utils import sh_to_list
+from ..utils import sh_to_list, async_func
 from ..actors import init
 from ..images import get_docker_image
 from ..console import config_tty
@@ -104,17 +104,17 @@ def get_work_dir(volumes):
     return '.' if volumes is None else '/'
 
 
-def _resolve(ctx, command):
-    resolve_task = resolve(
+@async_func
+def _resolve(ctx, command, *, loop):
+    yield from resolve(
         ctx.async_client,
         ctx.layers,
         ctx.services,
         command,
-        loop=ctx.loop,
+        loop=loop,
         pull=True,
         build=True,
     )
-    ctx.loop.run_until_complete(resolve_task)
 
 
 def _start_services(ctx, command):
@@ -138,7 +138,7 @@ class _CommandCreator:
 
         @click.pass_obj
         def cb(ctx, **kw):
-            _resolve(ctx, command)
+            _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
             _start_services(ctx, command)
             ensure_network(ctx.client, ctx.network)
@@ -172,7 +172,7 @@ class _CommandCreator:
 
         @click.pass_obj
         def cb(ctx, args):
-            _resolve(ctx, command)
+            _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
             _start_services(ctx, command)
             ensure_network(ctx.client, ctx.network)

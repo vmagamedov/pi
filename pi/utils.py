@@ -1,5 +1,6 @@
 import math
 import shlex
+import asyncio
 
 from collections import Sequence
 
@@ -83,3 +84,23 @@ def sh_to_list(args):
     else:
         assert isinstance(args, Sequence)
         return args
+
+
+def async_func(func):
+    func = asyncio.coroutine(func)
+
+    def wrapper(*args, loop, **kwargs):
+        task = asyncio.ensure_future(func(*args, loop=loop, **kwargs))
+        try:
+            loop.run_until_complete(task)
+        except KeyboardInterrupt as err:
+            task.cancel()
+            try:
+                loop.run_until_complete(task)
+            except asyncio.CancelledError:
+                pass
+            raise err
+        except BaseException:
+            raise task.exception()
+
+    return wrapper
