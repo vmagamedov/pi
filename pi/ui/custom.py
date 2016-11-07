@@ -106,12 +106,12 @@ def get_work_dir(volumes):
 
 def _resolve(ctx, command):
     resolve_task = resolve(
-        ctx.client,
         ctx.async_client,
         ctx.layers,
         ctx.services,
         command,
         loop=ctx.loop,
+        pull=True,
         build=True,
     )
     ctx.loop.run_until_complete(resolve_task)

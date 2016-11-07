@@ -1,5 +1,10 @@
+import json
+import socket
+
 from asyncio import coroutine
 from functools import partial
+from contextlib import contextmanager
+from collections import deque
 
 from ._requires.docker import Client, errors
 from ._requires.docker.utils import kwargs_from_env
@@ -13,10 +18,85 @@ def get_client():
     return Client(version='auto', **kwargs_from_env())
 
 
+class ChunkedReader:
+
+    def __init__(self, sock, *, loop):
+        self.sock = sock
+        self.loop = loop
+        self.chunk_size = None
+        self.tail = b''
+        self.chunks = deque()
+        self.complete = False
+
+    @coroutine
+    def read(self):
+        while not self.chunks:
+            if self.complete:
+                raise RuntimeError('Stream is already consumed')
+            data = yield from self.loop.sock_recv(self.sock, 4096)
+            if not data:
+                raise IOError('Incomplete response')
+            self.tail += data
+            while True:
+                if self.chunk_size is None:
+                    parts = self.tail.split(b'\r\n', 1)
+                    if len(parts) == 2:
+                        chunk_size_hex, self.tail = parts
+                        self.chunk_size = int(chunk_size_hex, 16)
+                    else:
+                        break
+                else:
+                    if len(self.tail) >= self.chunk_size + 2:
+                        self.chunks.append(self.tail[:self.chunk_size])
+                        self.tail = self.tail[self.chunk_size + 2:]
+                        if self.chunk_size == 0:
+                            self.complete = True
+                        self.chunk_size = None
+                        continue
+        return self.chunks.popleft()
+
+
+class DockerStreamDecoder:
+
+    def __init__(self, reader):
+        self.reader = reader
+
+    def read(self):
+        chunk = yield from self.reader.read()
+        if chunk:
+            return map(json.loads, chunk.decode('utf-8').strip().split('\r\n'))
+        else:
+            return []
+
+
+class _Client(Client):
+
+    def __init__(self, *args, loop, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loop = loop
+
+    @contextmanager
+    def _stream_ctx(self, response, decode=False):
+        with self._get_raw_response_socket(response) as sock_io:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
+                                 fileno=sock_io.fileno())
+            sock.setblocking(False)
+            reader = ChunkedReader(sock, loop=self.loop)
+            if decode:
+                reader = DockerStreamDecoder(reader)
+            yield reader
+
+    def _stream_helper(self, response, decode=False):
+        if response.raw._fp.chunked:
+            return self._stream_ctx(response, decode=decode)
+        else:
+            raise APIError('Error', response)
+
+
 class AsyncClient:
 
     def __init__(self, *, loop):
-        self._client = Client(version='auto', **kwargs_from_env())
+        self._client = _Client(version='auto', loop=loop, **kwargs_from_env())
         self._loop = loop
 
     @coroutine
@@ -63,3 +143,6 @@ class AsyncClient:
 
     def push(self, *args, **kwargs):
         return self._exec(self._client.push, *args, **kwargs)
+
+    def stop(self, *args, **kwargs):
+        return self._exec(self._client.stop, *args, **kwargs)

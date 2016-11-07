@@ -73,8 +73,8 @@ BUILD_FAILED = MessageType('BUILD_FAILED')
 
 
 @coroutine
-def pull_worker(client, async_client, queue, result_queue, *, loop):
-    puller = Puller(client, async_client, loop=loop)
+def pull_worker(async_client, queue, result_queue, *, loop):
+    puller = Puller(async_client, loop=loop)
     while True:
         dep = yield from queue.get()
         try:
@@ -88,12 +88,12 @@ def pull_worker(client, async_client, queue, result_queue, *, loop):
 
 
 @coroutine
-def build_worker(client, async_client, layers, queue, result_queue, *, loop):
+def build_worker(async_client, layers, queue, result_queue, *, loop):
     while True:
         dep = yield from queue.get()
         try:
             layer = layers.get(dep.image.name)
-            builder = Builder(client, async_client, layer, loop=loop)
+            builder = Builder(async_client, layer, loop=loop)
             result = yield from builder.visit(dep.image.provision_with)
         except Exception:
             log.exception('Failed to build image')
@@ -172,7 +172,7 @@ def mark_failed(deps_map, in_work, item):
 
 
 @coroutine
-def resolve(client, async_client, layers, services, obj, *, loop,
+def resolve(async_client, layers, services, obj, *, loop,
             pull=False, build=False, fail_fast=False):
     deps = ImagesCollector.collect(layers, services, obj)
     missing = yield from check(async_client, deps)
@@ -189,10 +189,10 @@ def resolve(client, async_client, layers, services, obj, *, loop,
     build_queue = Queue()
     result_queue = Queue()
 
-    puller_task = loop.create_task(pull_worker(client, async_client,
+    puller_task = loop.create_task(pull_worker(async_client,
                                                pull_queue, result_queue,
                                                loop=loop))
-    builder_task = loop.create_task(build_worker(client, async_client, layers,
+    builder_task = loop.create_task(build_worker(async_client, layers,
                                                  build_queue, result_queue,
                                                  loop=loop))
     try:

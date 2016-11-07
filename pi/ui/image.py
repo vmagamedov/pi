@@ -22,7 +22,6 @@ BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 def _build_image(ctx, *, name):
     image = ctx.layers.get(name).image
     failed = ctx.loop.run_until_complete(resolve(
-        ctx.client,
         ctx.async_client,
         ctx.layers,
         ctx.services,
@@ -81,7 +80,7 @@ def _get_image(layers, name):
 @click.pass_obj
 def image_pull(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = ctx.loop.run_until_complete(Puller(ctx.client, ctx.async_client,
+    success = ctx.loop.run_until_complete(Puller(ctx.async_client,
                                                  loop=ctx.loop).visit(image))
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
@@ -93,7 +92,7 @@ def image_pull(ctx, name):
 @click.pass_obj
 def image_push(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = ctx.loop.run_until_complete(Pusher(ctx.client, ctx.async_client,
+    success = ctx.loop.run_until_complete(Pusher(ctx.async_client,
                                                  loop=ctx.loop).visit(image))
     if not success:
         click.echo('Unable to push image {}'.format(image.name))

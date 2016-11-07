@@ -51,28 +51,34 @@ def _pi_python_tar():
     return f
 
 
+@coroutine
 def _echo_build_progress(client, output):
     error = False
     latest_container = None
     try:
-        for status in output:
-            if 'stream' in status:
-                sys.stdout.write(status['stream'])
-                match = re.search(u'Running in ([0-9a-f]+)',
-                                  status['stream'])
-                if match:
-                    latest_container = match.group(1)
-            elif 'error' in status:
-                error = True
-                sys.stdout.write(status['error'])
+        while True:
+            items = yield from output.read()
+            if not items:
+                break
+
+            for i in items:
+                if 'stream' in i:
+                    sys.stdout.write(i['stream'])
+                    match = re.search(u'Running in ([0-9a-f]+)',
+                                      i['stream'])
+                    if match:
+                        latest_container = match.group(1)
+                elif 'error' in i:
+                    error = True
+                    sys.stdout.write(i['error'])
         return not error
     except BaseException as original_exc:
         try:
             if latest_container is not None:
                 sys.stdout.write('Stopping current container {}...'
                                  .format(latest_container))
-                client.stop(latest_container, 5)
-                client.remove_container(latest_container)
+                yield from client.stop(latest_container, 5)
+                yield from client.remove_container(latest_container)
         except Exception:
             log.exception('Failed to delete current container')
         finally:
@@ -81,8 +87,7 @@ def _echo_build_progress(client, output):
 
 class Builder(object):
 
-    def __init__(self, client, async_client, layer, *, loop):
-        self.client = client
+    def __init__(self, async_client, layer, *, loop):
         self.async_client = async_client
         self.layer = layer
         self.loop = loop
@@ -106,19 +111,14 @@ class Builder(object):
             from_stmt = 'FROM {}'.format(self.from_.name).encode('ascii')
             docker_file = ANCESTOR_RE.sub(from_stmt, docker_file)
 
-        output = yield from self.async_client.build(
+        with (yield from self.async_client.build(
             tag=image.name,
             fileobj=io.BytesIO(docker_file),
             rm=True,
             stream=True,
             decode=True,
-        )
-        result = yield from self.loop.run_in_executor(
-            None,
-            _echo_build_progress,
-            self.client,
-            output,
-        )
+        )) as output:
+            result = yield from _echo_build_progress(self.async_client, output)
         return result
 
     @coroutine

@@ -104,32 +104,36 @@ def construct_layers(config):
     return list(layers.values())
 
 
+@coroutine
 def _echo_download_progress(output):
     error = False
     last_id = None
-    for progress in output:
-        error = error or 'error' in progress
+    while True:
+        items = yield from output.read()
+        if not items:
+            break
+        for i in items:
+            error = error or 'error' in i
 
-        progress_id = progress.get('id')
-        if last_id:
-            if progress_id == last_id:
-                sys.stdout.write('\x1b[2K\r')
-            elif not progress_id or progress_id != last_id:
+            progress_id = i.get('id')
+            if last_id:
+                if progress_id == last_id:
+                    sys.stdout.write('\x1b[2K\r')
+                elif not progress_id or progress_id != last_id:
+                    sys.stdout.write('\n')
+            last_id = progress_id
+
+            if progress_id:
+                sys.stdout.write('{}: '.format(progress_id))
+            sys.stdout.write(i.get('status') or i.get('error') or '')
+
+            progress_bar = i.get('progress')
+            if progress_bar:
+                sys.stdout.write(' ' + progress_bar)
+
+            if not progress_id:
                 sys.stdout.write('\n')
-        last_id = progress_id
-
-        if progress_id:
-            sys.stdout.write('{}: '.format(progress_id))
-        sys.stdout.write(progress.get('status') or
-                         progress.get('error') or '')
-
-        progress_bar = progress.get('progress')
-        if progress_bar:
-            sys.stdout.write(' ' + progress_bar)
-
-        if not progress_id:
-            sys.stdout.write('\n')
-        sys.stdout.flush()
+            sys.stdout.flush()
     if last_id:
         sys.stdout.write('\n')
         sys.stdout.flush()
@@ -138,8 +142,7 @@ def _echo_download_progress(output):
 
 class Puller:
 
-    def __init__(self, client, async_client, *, loop):
-        self.client = client
+    def __init__(self, async_client, *, loop):
         self.async_client = async_client
         self.loop = loop
 
@@ -158,18 +161,14 @@ class Puller:
                 return False
             raise
         else:
-            success = yield from self.loop.run_in_executor(
-                None,
-                _echo_download_progress,
-                output,
-            )
-            return success
+            with output as reader:
+                success = yield from _echo_download_progress(reader)
+                return success
 
 
 class Pusher:
 
-    def __init__(self, client, async_client, *, loop):
-        self.client = client
+    def __init__(self, async_client, *, loop):
         self.async_client = async_client
         self.loop = loop
 
@@ -180,9 +179,6 @@ class Pusher:
     def visit_dockerimage(self, obj):
         output = yield from self.async_client.push(obj.name, stream=True,
                                                    decode=True)
-        success = yield from self.loop.run_in_executor(
-            None,
-            _echo_download_progress,
-            output,
-        )
-        return success
+        with output as reader:
+            success = yield from _echo_download_progress(reader)
+            return success
