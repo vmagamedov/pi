@@ -1,5 +1,7 @@
 import sys
 
+from asyncio import coroutine
+
 from .._requires import click
 from .._requires import jinja2
 
@@ -7,9 +9,9 @@ from .._res import DUMB_INIT_LOCAL_PATH
 
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
-from ..utils import sh_to_list, async_func
-from ..actors import init
+from ..utils import sh_to_list
 from ..images import get_docker_image
+from ..context import async_cmd
 from ..console import config_tty
 from ..network import ensure_network
 from ..resolve import resolve
@@ -66,16 +68,6 @@ def render_template(template, params):
     return t.render(params)
 
 
-def execute(client, image, command, *, volumes=None, ports=None,
-            environ=None, work_dir=None, network=None, network_alias=None,
-            raw_input=False):
-    with config_tty(raw_input) as fd:
-        return init(run, client, fd, image, command,
-                    volumes=volumes, ports=ports, environ=environ,
-                    work_dir=work_dir, network=network,
-                    network_alias=network_alias)
-
-
 class _ParameterCreator:
 
     def visit(self, param):
@@ -104,7 +96,7 @@ def get_work_dir(volumes):
     return '.' if volumes is None else '/'
 
 
-@async_func
+@coroutine
 def _resolve(ctx, command, *, loop):
     yield from resolve(
         ctx.async_client,
@@ -117,10 +109,11 @@ def _resolve(ctx, command, *, loop):
     )
 
 
+@coroutine
 def _start_services(ctx, command):
     services = [ctx.services.get(name)
                 for name in command.requires or []]
-    ensure_running(ctx.client, ctx.namespace, services)
+    yield from ensure_running(ctx.async_client, ctx.namespace, services)
 
 
 class _CommandCreator:
@@ -137,11 +130,12 @@ class _CommandCreator:
                   for param in (command.params or [])]
 
         @click.pass_obj
+        @async_cmd
         def cb(ctx, **kw):
-            _resolve(ctx, command, loop=ctx.loop)
+            yield from _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
-            _start_services(ctx, command)
-            ensure_network(ctx.client, ctx.network)
+            yield from _start_services(ctx, command)
+            yield from ensure_network(ctx.async_client, ctx.network)
 
             volumes = get_volumes(command.volumes)
             volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
@@ -150,15 +144,18 @@ class _CommandCreator:
             cmd = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
                    render_template(command.eval, kw)]
 
-            exit_code = execute(ctx.client, docker_image, cmd,
-                                volumes=volumes,
-                                ports=command.ports,
-                                environ=command.environ,
-                                work_dir=get_work_dir(command.volumes),
-                                network=ctx.network,
-                                network_alias=command.network_name,
-                                raw_input=command.raw_input)
-            sys.exit(exit_code)
+            with config_tty(command.raw_input) as fd:
+                exit_code = yield from run(
+                    ctx.async_client, fd, docker_image, cmd,
+                    loop=ctx.loop,
+                    volumes=volumes,
+                    ports=command.ports,
+                    environ=command.environ,
+                    work_dir=get_work_dir(command.volumes),
+                    network=ctx.network,
+                    network_alias=command.network_name,
+                )
+                sys.exit(exit_code)
 
         short_help = None
         if command.description is not None:
@@ -171,22 +168,26 @@ class _CommandCreator:
         exec_ = sh_to_list(command.exec)
 
         @click.pass_obj
+        @async_cmd
         def cb(ctx, args):
-            _resolve(ctx, command, loop=ctx.loop)
+            yield from _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
-            _start_services(ctx, command)
-            ensure_network(ctx.client, ctx.network)
+            yield from _start_services(ctx, command)
+            yield from ensure_network(ctx.async_client, ctx.network)
 
-            exit_code = execute(ctx.client, docker_image,
-                                exec_ + args,
-                                volumes=get_volumes(command.volumes),
-                                ports=command.ports,
-                                environ=command.environ,
-                                work_dir=get_work_dir(command.volumes),
-                                network=ctx.network,
-                                network_alias=command.network_name,
-                                raw_input=command.raw_input)
-            sys.exit(exit_code)
+            cmd = exec_ + args
+            with config_tty(command.raw_input) as fd:
+                exit_code = yield from run(
+                    ctx.async_client, fd, docker_image, cmd,
+                    loop=ctx.loop,
+                    volumes=get_volumes(command.volumes),
+                    ports=command.ports,
+                    environ=command.environ,
+                    work_dir=get_work_dir(command.volumes),
+                    network=ctx.network,
+                    network_alias=command.network_name,
+                )
+                sys.exit(exit_code)
 
         short_help = None
         if command.description is not None:

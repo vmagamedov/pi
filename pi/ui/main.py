@@ -23,7 +23,7 @@ def build_cli():
     images_cli = create_images_cli(layers)
 
     services = get_services(config)
-    services_cli = create_service_cli(services)
+    services_cli = create_service_cli()
 
     commands_cli = create_commands_cli(config)
 

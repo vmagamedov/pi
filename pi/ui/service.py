@@ -7,13 +7,14 @@ from ..run import start
 from ..utils import search_container, sh_to_list
 from ..types import DockerImage
 from ..images import get_docker_image
-from ..actors import init
+from ..context import async_cmd
 from ..network import ensure_network
 from ..console import pretty
 from ..services import get_volumes, service_label
 
 
 @click.pass_obj
+@async_cmd
 def _start_callback(ctx, name):
     service = ctx.services.get(name, None)
     if service is None:
@@ -21,13 +22,13 @@ def _start_callback(ctx, name):
         sys.exit(-1)
 
     label = service_label(ctx.namespace, service)
-    containers = ctx.client.containers(all=True)
+    containers = yield from ctx.async_client.containers(all=True)
     container = next(search_container(label, containers), None)
     if container is not None:
         if container['State'] == 'running':
             click.echo('Service is already running')
         elif container['State'] == 'exited':
-            ctx.client.start(container)
+            yield from ctx.async_client.start(container)
             click.echo('Started previously stopped service')
         else:
             raise NotImplementedError(container['State'])
@@ -35,15 +36,16 @@ def _start_callback(ctx, name):
         exec_ = sh_to_list(service.exec) if service.exec else None
         args = sh_to_list(service.args) if service.args else None
         docker_image = get_docker_image(ctx.layers, service.image)
-        ensure_network(ctx.client, ctx.network)
-        init(start, ctx.client, docker_image, args,
-             entrypoint=exec_,
-             volumes=get_volumes(service.volumes),
-             ports=service.ports,
-             environ=service.environ,
-             network=ctx.network,
-             network_alias=service.name,
-             label=label)
+        yield from ensure_network(ctx.async_client, ctx.network)
+
+        yield from start(ctx.async_client, docker_image, args,
+                         entrypoint=exec_,
+                         volumes=get_volumes(service.volumes),
+                         ports=service.ports,
+                         environ=service.environ,
+                         network=ctx.network,
+                         network_alias=service.name,
+                         label=label)
         click.echo('Service started')
 
 
@@ -109,7 +111,7 @@ def _status_callback(ctx):
                                        'Docker image']))
 
 
-def create_service_cli(services):
+def create_service_cli():
     service_group = click.Group('service')
     service_group.add_command(
         click.Command('start', params=[click.Argument(['name'])],

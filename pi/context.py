@@ -39,7 +39,7 @@ class Context:
 
 def async_cmd(func):
 
-    @async_func
+    @async_func()
     def async_wrapper(ctx, *args, loop, **kwargs):
         yield from func(ctx, *args, **kwargs)
 

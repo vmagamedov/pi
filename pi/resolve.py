@@ -6,10 +6,10 @@ from collections import defaultdict
 
 from ._requires import attr
 
+from .utils import MessageType
 from .types import DockerImage, Dockerfile
 from .build import Builder
 from .images import Puller
-from .actors import MessageType
 
 
 log = logging.getLogger(__name__)

@@ -1,8 +1,19 @@
+import sys
 import math
 import shlex
+import signal
 import asyncio
 
 from collections import Sequence
+
+
+class MessageType:
+
+    def __init__(self, name):
+        self._name = name
+
+    def __repr__(self):
+        return '<MSG[{}]>'.format(self._name)
 
 
 def format_size(value):
@@ -86,21 +97,37 @@ def sh_to_list(args):
         return args
 
 
-def async_func(func):
-    func = asyncio.coroutine(func)
+def _sig_handler(sig_num, task):
+    msg = 'Interrupted' if sig_num == signal.SIGINT else 'Aborted'
+    sys.stderr.write('\n{}!\n'.format(msg))
+    task.cancel()
 
-    def wrapper(*args, loop, **kwargs):
-        task = loop.create_task(func(*args, loop=loop, **kwargs))
-        try:
-            loop.run_until_complete(task)
-        except KeyboardInterrupt as err:
-            task.cancel()
+
+def async_func(*, signals=(signal.SIGINT, signal.SIGTERM), exit_code=1):
+    def decorator(func):
+        coro_func = asyncio.coroutine(func)
+
+        def wrapper(*args, loop, **kwargs):
+            task = loop.create_task(coro_func(*args, loop=loop, **kwargs))
+            for sig_num in signals:
+                loop.add_signal_handler(sig_num, _sig_handler, sig_num, task)
             try:
                 loop.run_until_complete(task)
             except asyncio.CancelledError:
-                pass
-            raise err
-        except BaseException:
-            raise task.exception()
+                sys.exit(exit_code)
+            except BaseException:
+                raise task.exception()
+            finally:
+                for sig_num in signals:
+                    loop.remove_signal_handler(sig_num)
 
-    return wrapper
+        return wrapper
+    return decorator
+
+
+def terminate(task, *, loop, wait=1):
+    task.cancel()
+    try:
+        yield from asyncio.wait_for(task, wait, loop=loop)
+    except asyncio.CancelledError:
+        pass

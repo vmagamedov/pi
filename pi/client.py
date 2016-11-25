@@ -99,6 +99,12 @@ class AsyncClient:
         self._client = _Client(version='auto', loop=loop, **kwargs_from_env())
         self._loop = loop
 
+    def create_host_config(self, *args, **kwargs):
+        return self._client.create_host_config(*args, **kwargs)
+
+    def create_networking_config(self, *args, **kwargs):
+        return self._client.create_networking_config(*args, **kwargs)
+
     @coroutine
     def _exec(self, func, *args, **kwargs):
         wrapper = partial(func, *args, **kwargs)
@@ -146,3 +152,18 @@ class AsyncClient:
 
     def stop(self, *args, **kwargs):
         return self._exec(self._client.stop, *args, **kwargs)
+
+    def resize(self, *args, **kwargs):
+        return self._exec(self._client.resize, *args, **kwargs)
+
+    def attach_socket(self, *args, **kwargs):
+        return self._exec(self._client.attach_socket, *args, **kwargs)
+
+    def wait(self, *args, **kwargs):
+        return self._exec(self._client.wait, *args, **kwargs)
+
+    def containers(self, *args, **kwargs):
+        return self._exec(self._client.containers, *args, **kwargs)
+
+    def create_network(self, *args, **kwargs):
+        return self._exec(self._client.create_network, *args, **kwargs)

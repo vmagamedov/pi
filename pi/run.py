@@ -2,61 +2,57 @@ import sys
 import socket
 import os.path
 import logging
-from asyncio import Queue, CancelledError
+
+from asyncio import Queue, CancelledError, Event, coroutine
 
 from ._requires import click
 
+from .utils import terminate
 from .client import APIError, NotFound
-from .actors import receive, send, MessageType, terminate
 
 
 log = logging.getLogger(__name__)
 
-BYTES = MessageType('BYTES')
 
-
-def input(self, fd, dst):
-    q = Queue()
+@coroutine
+def stdin_reader(fd, in_queue, *, loop):
+    eof = Event(loop=loop)
 
     def cb():
-        q.put_nowait(os.read(fd, 32))
+        data = os.read(fd, 32)
+        if not data:
+            eof.set()
+        in_queue.put_nowait(data)
 
-    self.loop.add_reader(fd, cb)
+    loop.add_reader(fd, cb)
     try:
-        while True:
-            data = yield from q.get()
-            if not data:
-                break
-            yield from send(dst, BYTES, data)
+        yield from eof.wait()
     finally:
-        self.loop.remove_reader(fd)
+        loop.remove_reader(fd)
 
 
-def output(self):
+@coroutine
+def stdout_writer(out_queue):
     while True:
-        type_, value = yield from receive(self)
-        if type_ is BYTES:
-            sys.stdout.write(value.decode('utf-8', 'replace'))
-            sys.stdout.flush()
-        else:
-            raise TypeError(type_)
+        data = yield from out_queue.get()
+        sys.stdout.write(data.decode('utf-8', 'replace'))
+        sys.stdout.flush()
 
 
-def socket_reader(self, sock, dst):
+@coroutine
+def socket_reader(sock, out_queue, *, loop):
     while True:
-        data = yield from self.loop.sock_recv(sock, 4096)
+        data = yield from loop.sock_recv(sock, 4096)
         if not data:
             break
-        yield from send(dst, BYTES, data)
+        yield from out_queue.put(data)
 
 
-def socket_writer(self, sock):
+@coroutine
+def socket_writer(sock, in_queue, *, loop):
     while True:
-        type_, value = yield from receive(self)
-        if type_ is BYTES:
-            yield from self.loop.sock_sendall(sock, value)
-        else:
-            raise TypeError(type_)
+        data = yield from in_queue.get()
+        yield from loop.sock_sendall(sock, data)
 
 
 class _VolumeBinds:
@@ -98,7 +94,8 @@ def _port_binds(ports):
             for e in ports}
 
 
-def start(self, client, image, command, *, entrypoint=None,
+@coroutine
+def start(client, image, command, *, entrypoint=None,
           volumes=None, ports=None, environ=None, work_dir=None,
           network=None, network_alias=None, label=None):
     volumes = volumes or []
@@ -123,8 +120,7 @@ def start(self, client, image, command, *, entrypoint=None,
             network: {'Aliases': [network_alias]},
         })
     try:
-        c = yield from self.exec(
-            client.create_container,
+        c = yield from client.create_container(
             image=image.name,
             command=command,
             stdin_open=True,
@@ -142,65 +138,73 @@ def start(self, client, image, command, *, entrypoint=None,
         click.echo(e.explanation)
         return
     try:
-        yield from self.exec(client.start, c)
+        yield from client.start(c)
     except APIError as e:
         click.echo(e.explanation)
-        yield from self.exec(client.remove_container, c, v=True, force=True)
+        yield from client.remove_container(c, v=True, force=True)
     else:
         return c
 
 
-def resize(self, client, container):
+@coroutine
+def resize(client, container):
     width, height = click.get_terminal_size()
     try:
-        yield from self.exec(client.resize, container, height, width)
+        yield from client.resize(container, height, width)
     except NotFound as e:
         log.debug('Failed to resize terminal: %s', e)
 
 
-def attach(self, client, container, input_fd, *, wait_exit=3):
+@coroutine
+def attach(client, container, input_fd, *, loop, wait_exit=3):
     params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
-    with (yield from self.exec(client.attach_socket, container, params)) \
-            as sock_io:
+    with (yield from client.attach_socket(container, params)) as sock_io:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
                              fileno=sock_io.fileno())
         sock.setblocking(False)
 
-        socket_writer_proc = self.spawn(socket_writer, sock)
-        input_proc = self.spawn(input, input_fd, socket_writer_proc)
+        container_input = Queue(loop=loop)
+        socket_writer_task = loop.create_task(
+            socket_writer(sock, container_input, loop=loop))
+        stdin_reader_task = loop.create_task(
+            stdin_reader(input_fd, container_input, loop=loop))
 
-        output_proc = self.spawn(output)
-        socket_reader_proc = self.spawn(socket_reader, sock, output_proc)
+        container_output = Queue(loop=loop)
+        stdout_writer_task = loop.create_task(
+            stdout_writer(container_output))
+        socket_reader_task = loop.create_task(
+            socket_reader(sock, container_output, loop=loop))
 
         exit_code = None
         try:
-            exit_code = yield from self.exec(client.wait, container)
+            exit_code = yield from client.wait(container)
         except CancelledError:
-            yield from self.exec(client.stop, container, timeout=wait_exit)
-            yield from terminate(socket_reader_proc)
+            yield from client.stop(container, timeout=wait_exit)
+            yield from terminate(socket_reader_task, loop=loop)
 
-        yield from terminate(output_proc)
-        yield from terminate(input_proc)
-        yield from terminate(socket_reader_proc)
-        yield from terminate(socket_writer_proc)
+        yield from terminate(stdout_writer_task, loop=loop)
+        yield from terminate(stdin_reader_task, loop=loop)
+        yield from terminate(socket_reader_task, loop=loop)
+        yield from terminate(socket_writer_task, loop=loop)
         return exit_code
 
 
-def run(self, client, input_fd, image, command, *,
+@coroutine
+def run(client, input_fd, image, command, *, loop,
         volumes=None, ports=None, environ=None, work_dir=None, network=None,
         network_alias=None, wait_exit=3):
-    c = yield from start(self, client, image, command, volumes=volumes,
+    c = yield from start(client, image, command, volumes=volumes,
                          ports=ports, environ=environ, work_dir=work_dir,
                          network=network, network_alias=network_alias)
     if c is None:
         return
     try:
-        yield from resize(self, client, c)
-        exit_code = yield from attach(self, client, c, input_fd,
+        yield from resize(client, c)
+        exit_code = yield from attach(client, c, input_fd, loop=loop,
                                       wait_exit=wait_exit)
         if exit_code is None:
-            exit_code = yield from self.exec(client.wait, c)
+            exit_code = yield from client.wait(c)
         return exit_code
 
     finally:
-        yield from self.exec(client.remove_container, c, v=True, force=True)
+        yield from client.remove_container(c, v=True, force=True)

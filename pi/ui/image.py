@@ -9,7 +9,6 @@ from ..run import run
 from ..types import DockerImage, Mode, LocalPath
 from ..utils import format_size
 from ..images import Puller, Pusher
-from ..actors import init
 from ..console import pretty, config_tty
 from ..context import async_cmd
 from ..resolve import resolve
@@ -106,6 +105,7 @@ def image_push(ctx, name):
               help='Mount volume: "/host" or "/host:/container" or '
                    '"/host:/container:rw"')
 @click.pass_obj
+@async_cmd
 def image_shell(ctx, name, volume):
     image = _get_image(ctx.layers, name)
 
@@ -126,8 +126,9 @@ def image_shell(ctx, name, volume):
         volumes.append(LocalPath(from_, to, mode))
 
     with config_tty(raw_input=True) as fd:
-        sys.exit(init(run, ctx.client, fd, image, '/bin/sh',
-                      volumes=volumes))
+        exit_code = yield from run(ctx.async_client, fd, image, '/bin/sh',
+                                   loop=ctx.loop, volumes=volumes)
+        sys.exit(exit_code)
 
 
 _Tag = namedtuple('_Tag', 'value created')
