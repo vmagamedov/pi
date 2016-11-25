@@ -21,7 +21,7 @@ from ..services import ensure_running
 DUMB_INIT_REMOTE_PATH = '/.pi-dumb-init'
 
 
-class ProxyCommand(click.MultiCommand):
+class ProxyCommand(click.Command):
 
     def parse_args(self, ctx, args):
         ctx.args = args

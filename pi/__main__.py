@@ -1,9 +1,9 @@
-from .ui.main import build_cli
+from .ui.main import build_ui
 
 
 def main():
-    cli = build_cli()
-    cli()
+    ui = build_ui()
+    ui()
 
 
 if __name__ == '__main__':
