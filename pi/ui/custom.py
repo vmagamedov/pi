@@ -99,7 +99,7 @@ def get_work_dir(volumes):
 @coroutine
 def _resolve(ctx, command, *, loop):
     yield from resolve(
-        ctx.async_client,
+        ctx.client,
         ctx.layers,
         ctx.services,
         command,
@@ -113,7 +113,7 @@ def _resolve(ctx, command, *, loop):
 def _start_services(ctx, command):
     services = [ctx.services.get(name)
                 for name in command.requires or []]
-    yield from ensure_running(ctx.async_client, ctx.namespace, services)
+    yield from ensure_running(ctx.client, ctx.namespace, services)
 
 
 class _CommandCreator:
@@ -135,7 +135,7 @@ class _CommandCreator:
             yield from _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
             yield from _start_services(ctx, command)
-            yield from ensure_network(ctx.async_client, ctx.network)
+            yield from ensure_network(ctx.client, ctx.network)
 
             volumes = get_volumes(command.volumes)
             volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
@@ -146,7 +146,7 @@ class _CommandCreator:
 
             with config_tty(command.raw_input) as fd:
                 exit_code = yield from run(
-                    ctx.async_client, fd, docker_image, cmd,
+                    ctx.client, fd, docker_image, cmd,
                     loop=ctx.loop,
                     volumes=volumes,
                     ports=command.ports,
@@ -173,12 +173,12 @@ class _CommandCreator:
             yield from _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
             yield from _start_services(ctx, command)
-            yield from ensure_network(ctx.async_client, ctx.network)
+            yield from ensure_network(ctx.client, ctx.network)
 
             cmd = exec_ + args
             with config_tty(command.raw_input) as fd:
                 exit_code = yield from run(
-                    ctx.async_client, fd, docker_image, cmd,
+                    ctx.client, fd, docker_image, cmd,
                     loop=ctx.loop,
                     volumes=get_volumes(command.volumes),
                     ports=command.ports,

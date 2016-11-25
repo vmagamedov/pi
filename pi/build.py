@@ -1,10 +1,10 @@
 import io
 import re
 import sys
-import json
 import tarfile
 import logging
 import subprocess
+
 from asyncio import coroutine
 from tempfile import NamedTemporaryFile
 
@@ -87,8 +87,8 @@ def _echo_build_progress(client, output):
 
 class Builder(object):
 
-    def __init__(self, async_client, layer, *, loop):
-        self.async_client = async_client
+    def __init__(self, client, layer, *, loop):
+        self.client = client
         self.layer = layer
         self.loop = loop
         if layer.parent:
@@ -111,21 +111,21 @@ class Builder(object):
             from_stmt = 'FROM {}'.format(self.from_.name).encode('ascii')
             docker_file = ANCESTOR_RE.sub(from_stmt, docker_file)
 
-        with (yield from self.async_client.build(
+        with (yield from self.client.build(
             tag=image.name,
             fileobj=io.BytesIO(docker_file),
             rm=True,
             stream=True,
             decode=True,
         )) as output:
-            result = yield from _echo_build_progress(self.async_client, output)
+            result = yield from _echo_build_progress(self.client, output)
         return result
 
     @coroutine
     def visit_ansibletasks(self, obj):
         from ._requires import yaml
 
-        c = yield from self.async_client.create_container(
+        c = yield from self.client.create_container(
             self.from_.name,
             '/bin/sh',
             detach=True,
@@ -135,8 +135,8 @@ class Builder(object):
         c_id = c['Id']
         plays = [{'hosts': c_id, 'tasks': obj.tasks}]
         try:
-            yield from self.async_client.start(c)
-            yield from self.async_client.put_archive(c, '/', _pi_python_tar())
+            yield from self.client.start(c)
+            yield from self.client.put_archive(c, '/', _pi_python_tar())
             with NamedTemporaryFile('w+', encoding='utf-8') as pb_file, \
                     NamedTemporaryFile('w+', encoding='ascii') as inv_file:
                 pb_file.write(yaml.dump(plays))
@@ -158,20 +158,20 @@ class Builder(object):
                     return False
 
                 # cleanup
-                rm_id = yield from self.async_client.exec_create(
+                rm_id = yield from self.client.exec_create(
                     c,
                     ['rm', '-rf', REMOTE_PYTHON_PREFIX],
                 )
-                yield from self.async_client.exec_start(rm_id)
+                yield from self.client.exec_start(rm_id)
 
                 # commit
-                yield from self.async_client.pause(c)
-                yield from self.async_client.commit(
+                yield from self.client.pause(c)
+                yield from self.client.commit(
                     c,
                     self.layer.image.repository,
                     self.layer.version(),
                 )
-                yield from self.async_client.unpause(c)
+                yield from self.client.unpause(c)
                 return True
         finally:
-            yield from self.async_client.remove_container(c, v=True, force=True)
+            yield from self.client.remove_container(c, v=True, force=True)

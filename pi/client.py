@@ -14,10 +14,6 @@ APIError = errors.APIError
 NotFound = errors.NotFound
 
 
-def get_client():
-    return Client(version='auto', **kwargs_from_env())
-
-
 class ChunkedReader:
 
     def __init__(self, sock, *, loop):
@@ -167,3 +163,6 @@ class AsyncClient:
 
     def create_network(self, *args, **kwargs):
         return self._exec(self._client.create_network, *args, **kwargs)
+
+    def remove_image(self, *args, **kwargs):
+        return self._exec(self._client.remove_image, *args, **kwargs)

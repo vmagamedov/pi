@@ -22,13 +22,13 @@ def _start_callback(ctx, name):
         sys.exit(-1)
 
     label = service_label(ctx.namespace, service)
-    containers = yield from ctx.async_client.containers(all=True)
+    containers = yield from ctx.client.containers(all=True)
     container = next(search_container(label, containers), None)
     if container is not None:
         if container['State'] == 'running':
             click.echo('Service is already running')
         elif container['State'] == 'exited':
-            yield from ctx.async_client.start(container)
+            yield from ctx.client.start(container)
             click.echo('Started previously stopped service')
         else:
             raise NotImplementedError(container['State'])
@@ -36,9 +36,9 @@ def _start_callback(ctx, name):
         exec_ = sh_to_list(service.exec) if service.exec else None
         args = sh_to_list(service.args) if service.args else None
         docker_image = get_docker_image(ctx.layers, service.image)
-        yield from ensure_network(ctx.async_client, ctx.network)
+        yield from ensure_network(ctx.client, ctx.network)
 
-        yield from start(ctx.async_client, docker_image, args,
+        yield from start(ctx.client, docker_image, args,
                          entrypoint=exec_,
                          volumes=get_volumes(service.volumes),
                          ports=service.ports,
@@ -50,6 +50,7 @@ def _start_callback(ctx, name):
 
 
 @click.pass_obj
+@async_cmd
 def _stop_callback(ctx, name):
     service = ctx.services.get(name, None)
     if service is None:
@@ -57,7 +58,7 @@ def _stop_callback(ctx, name):
         sys.exit(-1)
 
     label = service_label(ctx.namespace, service)
-    all_containers = ctx.client.containers(all=True)
+    all_containers = yield from ctx.client.containers(all=True)
     containers = list(search_container(label, all_containers))
     if not containers:
         click.echo('Service was not started')
@@ -65,14 +66,15 @@ def _stop_callback(ctx, name):
 
     for container in containers:
         if container['State'] == 'running':
-            ctx.client.stop(container, timeout=3)
-        ctx.client.remove_container(container, v=True, force=True)
+            yield from ctx.client.stop(container, timeout=3)
+        yield from ctx.client.remove_container(container, v=True, force=True)
     click.echo('Service stopped')
 
 
 @click.pass_obj
+@async_cmd
 def _status_callback(ctx):
-    containers = ctx.client.containers(all=True)
+    containers = yield from ctx.client.containers(all=True)
 
     running = set()
     exited = set()

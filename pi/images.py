@@ -142,8 +142,8 @@ def _echo_download_progress(output):
 
 class Puller:
 
-    def __init__(self, async_client, *, loop):
-        self.async_client = async_client
+    def __init__(self, client, *, loop):
+        self.client = client
         self.loop = loop
 
     def visit(self, obj):
@@ -154,8 +154,8 @@ class Puller:
         from .client import APIError
 
         try:
-            output = yield from self.async_client.pull(obj.name, stream=True,
-                                                       decode=True)
+            output = yield from self.client.pull(obj.name, stream=True,
+                                                 decode=True)
         except APIError as e:
             if e.response.status_code == 404:
                 return False
@@ -168,8 +168,8 @@ class Puller:
 
 class Pusher:
 
-    def __init__(self, async_client, *, loop):
-        self.async_client = async_client
+    def __init__(self, client, *, loop):
+        self.client = client
         self.loop = loop
 
     def visit(self, obj):
@@ -177,8 +177,8 @@ class Pusher:
 
     @coroutine
     def visit_dockerimage(self, obj):
-        output = yield from self.async_client.push(obj.name, stream=True,
-                                                   decode=True)
+        output = yield from self.client.push(obj.name, stream=True,
+                                             decode=True)
         with output as reader:
             success = yield from _echo_download_progress(reader)
             return success

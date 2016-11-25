@@ -26,12 +26,6 @@ class Context:
 
     @cached_property
     def client(self):
-        from .client import get_client
-
-        return get_client()
-
-    @cached_property
-    def async_client(self):
         from .client import AsyncClient
 
         return AsyncClient(loop=self.loop)

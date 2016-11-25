@@ -45,21 +45,21 @@ class MappingConstruct:
     @classmethod
     def construct(cls, loader, node):
         rename_from = {v: k for k, v in cls.__rename_to__.items()}
-        
+
         params = loader.construct_mapping(node, deep=True)
-        
+
         required = {rename_from.get(a.name, a.name)
                     for a in cls.__attrs_attrs__
                     if a.default is attr.NOTHING}
-        
+
         optional = {rename_from.get(a.name, a.name)
                     for a in cls.__attrs_attrs__
                     if a.default is not attr.NOTHING}
-        
+
         missing = set(required).difference(params)
         if missing:
             raise TypeError('Missing params {!r} for {!r}'.format(missing, cls))
-        
+
         clean_params = {cls.__rename_to__.get(k, k): v
                         for k, v in params.items()
                         if k in required or k in optional}

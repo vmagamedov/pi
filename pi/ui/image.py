@@ -22,7 +22,7 @@ BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 def _build_image(ctx, *, name):
     image = ctx.layers.get(name).image
     failed = yield from resolve(
-        ctx.async_client,
+        ctx.client,
         ctx.layers,
         ctx.services,
         image,
@@ -37,13 +37,15 @@ def _build_image(ctx, *, name):
 
 @click.command('list', help='List known images')
 @click.pass_obj
+@async_cmd
 def image_list(ctx):
     from .._requires.tabulate import tabulate
 
     available = set()
     counts = Counter()
     sizes = {}
-    for image in ctx.client.images():
+    images = yield from ctx.client.images()
+    for image in images:
         available.update(image['RepoTags'])
         for repo_tag in image['RepoTags']:
             repo, _ = repo_tag.split(':')
@@ -81,7 +83,7 @@ def _get_image(layers, name):
 @async_cmd
 def image_pull(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = yield from Puller(ctx.async_client, loop=ctx.loop).visit(image)
+    success = yield from Puller(ctx.client, loop=ctx.loop).visit(image)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
@@ -93,7 +95,7 @@ def image_pull(ctx, name):
 @async_cmd
 def image_push(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = yield from Pusher(ctx.async_client, loop=ctx.loop).visit(image)
+    success = yield from Pusher(ctx.client, loop=ctx.loop).visit(image)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)
@@ -126,7 +128,7 @@ def image_shell(ctx, name, volume):
         volumes.append(LocalPath(from_, to, mode))
 
     with config_tty(raw_input=True) as fd:
-        exit_code = yield from run(ctx.async_client, fd, image, '/bin/sh',
+        exit_code = yield from run(ctx.client, fd, image, '/bin/sh',
                                    loop=ctx.loop, volumes=volumes)
         sys.exit(exit_code)
 
@@ -138,17 +140,20 @@ _Tag = namedtuple('_Tag', 'value created')
 @click.option('-c', '--count', type=click.INT, default=2, show_default=True,
               help='How much versions to leave')
 @click.pass_obj
+@async_cmd
 def image_gc(ctx, count):
     if count < 0:
         click.echo('Count should be more or equal to 0')
         sys.exit(-1)
     known_repos = {l.image.repository for l in ctx.layers}
-    repo_tags_used = {c['Image'] for c in ctx.client.containers(all=True)}
+    containers = yield from ctx.client.containers(all=True)
+    repo_tags_used = {c['Image'] for c in containers}
 
     by_repo = defaultdict(list)
     to_delete = []
 
-    for image in ctx.client.images():
+    images = yield from ctx.client.images()
+    for image in images:
         repo_tags = set(image['RepoTags'])
         if repo_tags == {'<none>:<none>'}:
             to_delete.append(image['Id'])
@@ -165,7 +170,7 @@ def image_gc(ctx, count):
             to_delete.append('{}:{}'.format(repo, tag.value))
 
     for image in to_delete:
-        ctx.client.remove_image(image)
+        yield from ctx.client.remove_image(image)
         click.echo('Removed: {}'.format(image))
 
 
