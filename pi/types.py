@@ -3,10 +3,10 @@
     ~~~~~~~~~~~~~
 
     `Pi` uses tagged values feature of the YAML_ format, which are mapped
-    directly to the internal types of `Pi`. This kind of DSL is used to
+    directly into internal types of `Pi`. This kind of DSL is used to
     describe project environment in a most simple way.
 
-    .. _YAML: http://yaml.org
+    .. _YAML: http://yaml.org/spec/
 """
 from enum import Enum
 
