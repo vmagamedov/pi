@@ -1,5 +1,5 @@
 `Pi` -- command-line tool for managing development environments.
-It is configurable using :doc:`DSL </types>` with YAML_ syntax, which is
+It is configurable using DSL with YAML_ syntax, which is
 like `Makefile` on steroids -- with nice command-line UI and containerized
 environments.
 
@@ -10,8 +10,7 @@ environments.
 Example
 ~~~~~~~
 
-Configuration to build this documentation, ``pi.yaml``
-(:doc:`reference </types>`):
+Configuration to build this documentation, `pi.yaml`:
 
 .. code-block:: yaml
 
