@@ -50,6 +50,7 @@ Loader.register(types.LocalPath)
 Loader.register(types.NamedVolume)
 Loader.register(types.Expose)
 Loader.register_enum(types.Mode)
+Loader.register(types.Download)
 
 
 def read_config():

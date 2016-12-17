@@ -287,3 +287,13 @@ class SubCommand(CommandType, MappingConstruct):
 
     def accept(self, visitor):
         return visitor.visit_subcommand(self)
+
+
+@attr.s
+class Download(ScalarConstruct):
+    __tag__ = '!Download'
+
+    url = attr.ib()
+
+    def accept(self, visitor):
+        return visitor.visit_download(self)

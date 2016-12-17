@@ -3,6 +3,17 @@
     Project command-line interface
 
 - !Image
+  name: test
+  from: !DockerImage python:3.4.5-alpine
+  repository: reg.local/pi/test
+  provision-with: !AnsibleTasks
+    - pip: name={{item}} executable=pip3 extra_args='--no-cache-dir'
+      with_items:
+        - aiohttp==1.0.5
+        - pytest==3.0.5
+        - pytest-asyncio==0.5.0
+
+- !Image
   name: docs
   from: !DockerImage python:3.5.2-alpine
   repository: reg.local/pi/docs
@@ -11,6 +22,11 @@
       with_items:
         - sphinx==1.4.8
         - sphinx_rtd_theme==0.1.10a0
+
+- !SubCommand
+  name: test
+  image: test
+  exec: py.test tests
 
 - !ShellCommand
   name: build docs
@@ -63,9 +79,3 @@
   from: env
   repository: reg.local/app.env.dockerfile
   provision-with: !Dockerfile Dockerfile.app.env
-
-
-- !SubCommand
-  name: test
-  image: app.env.ansible
-  exec: echo
