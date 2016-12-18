@@ -1,8 +1,13 @@
+import os
+import tarfile
 import tempfile
+import unicodedata
 
+from pathlib import Path
 from asyncio import coroutine, wait, CancelledError, Queue, Event, ensure_future
-from asyncio import FIRST_COMPLETED, FIRST_EXCEPTION, get_event_loop
+from asyncio import FIRST_COMPLETED, FIRST_EXCEPTION
 from contextlib import contextmanager
+from concurrent.futures import ProcessPoolExecutor
 
 import pytest
 
@@ -12,7 +17,7 @@ from pi._requires import attr
 from pi._requires import jinja2
 from pi._requires import requests
 
-from pi.types import Download
+from pi.types import Download, Dir
 from pi.utils import terminate
 
 
@@ -26,7 +31,8 @@ def compile_task(task):
 class DownloadsVisitor:
 
     def __init__(self):
-        self.downloads = set()
+        self.downloads = []
+        self._seen = set()
 
     def visit(self, obj):
         return obj.accept(self)
@@ -36,7 +42,28 @@ class DownloadsVisitor:
             self.visit(value)
 
     def visit_download(self, obj):
-        self.downloads.add(obj)
+        if obj not in self._seen:
+            self.downloads.append(obj)
+            self._seen.add(obj)
+
+
+class DirsVisitor:
+
+    def __init__(self):
+        self.dirs = []
+        self._seen = set()
+
+    def visit(self, obj):
+        return obj.accept(self)
+
+    def visit_task(self, obj):
+        for value in obj.get('where', {}).values():
+            self.visit(value)
+
+    def visit_dir(self, obj):
+        if obj not in self._seen:
+            self.dirs.append(obj)
+            self._seen.add(obj)
 
 
 @attr.s
@@ -72,16 +99,13 @@ def _download_worker(input_queue, *, loop):
 
 @coroutine
 def _download_workers(input_queue, concurrency, *, loop):
-    tasks = [loop.create_task(_download_worker(input_queue, loop=loop))
-             for _ in range(concurrency)]
+    pending = [loop.create_task(_download_worker(input_queue, loop=loop))
+               for _ in range(concurrency)]
     try:
-        _, pending = yield from wait(tasks, loop=loop,
-                                     return_when=FIRST_EXCEPTION)
-    except CancelledError:
-        for task in tasks:
-            yield from terminate(task, loop=loop)
-    else:
         # fast exit on first error
+        _, pending = yield from wait(pending, loop=loop,
+                                     return_when=FIRST_EXCEPTION)
+    finally:
         for task in pending:
             yield from terminate(task, loop=loop)
 
@@ -122,9 +146,87 @@ def download(states, concurrency=2, *, loop):
             yield from terminate(task, loop=loop)
 
 
+@attr.s
+class DirState:
+    path = attr.ib()
+    complete = attr.ib()
+    temp_file = attr.ib()
+    error = attr.ib(None)
+
+
+def _packer(state_path, state_temp_file):
+    dir_path = Path(state_path).resolve()  # FIXME: raises FileNotFoundError
+    assert dir_path.is_dir(), dir_path
+
+    cur_path = Path('.').resolve()
+    assert cur_path in dir_path.parents, dir_path
+
+    rel_path = dir_path.relative_to(cur_path)
+
+    def filter_(path_):
+        # TODO: ability to exclude (.gitignore? .hgignore?)
+        return True
+
+    with open(state_temp_file, 'wb+') as tmp:
+        with tarfile.open(mode='w:tar', fileobj=tmp) as tar:
+            for path, _, names in os.walk(str(rel_path)):
+                if not filter_(path):
+                    continue
+
+                arc_path = unicodedata.normalize('NFC', path)
+                tar.addfile(tar.gettarinfo(path, arc_path))
+                for name in names:
+                    file_path = os.path.join(path, name)
+                    if not filter_(file_path):
+                        continue
+
+                    arc_file_path = unicodedata.normalize('NFC', file_path)
+                    with open(file_path, 'rb') as f:
+                        tar.addfile(tar.gettarinfo(file_path, arc_file_path,
+                                                   fileobj=f),
+                                    fileobj=f)
+
+
+@contextmanager
+def dir_states(tasks, *, loop):
+    dirs_visitor = DirsVisitor()
+    for task in tasks:
+        dirs_visitor.visit_task(task)
+    states = [DirState(d.path, Event(loop=loop), tempfile.NamedTemporaryFile())
+              for d in dirs_visitor.dirs]
+    try:
+        yield states
+    finally:
+        for state in states:
+            state.temp_file.close()
+
+
+@coroutine
+def pack(states, *, loop, pool):
+    pending = [loop.run_in_executor(pool, _packer, state.path,
+                                    state.temp_file.name)
+               for state in states]
+
+    states_map = dict(zip(pending, states))
+    try:
+        while True:
+            done, pending = yield from wait(pending,
+                                            return_when=FIRST_COMPLETED)
+            for task in done:
+                state = states_map[task]
+                error = task.exception()
+                if error:
+                    state.error = error
+                state.complete.set()
+            if not pending:
+                break
+    finally:
+        for task in pending:
+            yield from terminate(task, loop=loop)
+
+
 def test_simple():
     task = {
-        'name': 'freo pella beganne chalet unweave',
         'run': 'feeds {{maude}}',
         'where': {
             'maude': 'pullus',
@@ -135,23 +237,18 @@ def test_simple():
 
 def test_download():
     task = {
-        'name': 'begem daysail macking noni zombie',
-        'run': 'aligner {{maude}}',
         'where': {
             'adiabat': Download('thorow'),
         },
     }
     downloads_visitor = DownloadsVisitor()
     downloads_visitor.visit_task(task)
-    assert downloads_visitor.downloads == {Download('thorow')}
+    assert downloads_visitor.downloads == [Download('thorow')]
 
 
 @pytest.mark.asyncio
-@coroutine
 def test_real_download(event_loop):
     task = {
-        'name': 'begem-daysail-macking-noni-zombie',
-        'run': 'aligner {{maude}}',
         'where': {
             'adiabat': Download('http://localhost:6789/'),
         },
@@ -181,6 +278,18 @@ def test_real_download(event_loop):
         yield from app.cleanup()
 
 
-if __name__ == '__main__':
-    loop = get_event_loop()
-    loop.run_until_complete(test_real_download(loop))
+@pytest.mark.asyncio
+def test_dir(event_loop):
+    task = {
+        'where': {
+            'slaw': Dir('pi/ui'),
+        },
+    }
+    with ProcessPoolExecutor(1) as pool:
+        with dir_states([task], loop=event_loop) as states:
+            yield from pack(states, loop=event_loop, pool=pool)
+
+            state, = states
+            assert state.complete.is_set()
+            with tarfile.open(state.temp_file.name) as tmp:
+                assert 'pi/ui/__init__.py' in tmp.getnames()

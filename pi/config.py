@@ -51,6 +51,7 @@ Loader.register(types.NamedVolume)
 Loader.register(types.Expose)
 Loader.register_enum(types.Mode)
 Loader.register(types.Download)
+Loader.register(types.Dir)
 
 
 def read_config():

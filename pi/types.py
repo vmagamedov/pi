@@ -297,3 +297,13 @@ class Download(ScalarConstruct):
 
     def accept(self, visitor):
         return visitor.visit_download(self)
+
+
+@attr.s
+class Dir(ScalarConstruct):
+    __tag__ = '!Dir'
+
+    path = attr.ib()
+
+    def accept(self, visitor):
+        return visitor.visit_dir(self)
