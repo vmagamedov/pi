@@ -1,12 +1,13 @@
 import os
 import tarfile
+import hashlib
 import tempfile
 import unicodedata
 
 from pathlib import Path
-from asyncio import coroutine, wait, CancelledError, Queue, Event, ensure_future
-from asyncio import FIRST_COMPLETED, FIRST_EXCEPTION
-from contextlib import contextmanager
+from asyncio import coroutine, wait, Queue, Event, gather, FIRST_EXCEPTION
+from contextlib import closing
+from unittest.mock import Mock
 from concurrent.futures import ProcessPoolExecutor
 
 import pytest
@@ -17,145 +18,75 @@ from pi._requires import attr
 from pi._requires import jinja2
 from pi._requires import requests
 
-from pi.types import Download, Dir
+from pi.types import Download, Bundle
 from pi.utils import terminate
 
 
-def compile_task(task):
-    template = task['run']
-    params = task['where']
+@attr.s
+class Task:
+    run = attr.ib()
+    name = attr.ib(default=None)
+    where = attr.ib(default=attr.Factory(dict))
+
+
+class ResultBase:
+
+    def value(self):
+        raise NotImplementedError
+
+    def close(self):
+        raise NotImplementedError
+
+
+@attr.s
+class Result(ResultBase):
+    file = attr.ib()
+
+    def value(self):
+        return hashlib.sha1(self.file.name.encode('utf-8')).hexdigest()
+
+    def close(self):
+        self.file.close()
+
+
+@attr.s
+class SimpleResult(ResultBase):
+    content = attr.ib()
+
+    def value(self):
+        return self.content
+
+    def close(self):
+        pass
+
+
+@attr.s
+class ActionState:
+    complete = attr.ib()
+    result = attr.ib()
+    error = attr.ib(default=None)
+
+
+def compile_task(task: Task, states):
+    template = task.run
+    params = {key: states[action].result.value()
+              for key, action in task.where.items()}
     t = jinja2.Template(template)
     return t.render(params)
 
 
-class DownloadsVisitor:
-
-    def __init__(self):
-        self.downloads = []
-        self._seen = set()
-
-    def visit(self, obj):
-        return obj.accept(self)
-
-    def visit_task(self, obj):
-        for value in obj.get('where', {}).values():
-            self.visit(value)
-
-    def visit_download(self, obj):
-        if obj not in self._seen:
-            self.downloads.append(obj)
-            self._seen.add(obj)
+def download(url, file_name):
+    with open(file_name, 'wb') as f:
+        # downloaded = 0
+        response = requests.get(url)
+        response.raise_for_status()
+        for chunk in response.iter_content(64 * 1024):
+            f.write(chunk)
+            # downloaded += len(chunk)
 
 
-class DirsVisitor:
-
-    def __init__(self):
-        self.dirs = []
-        self._seen = set()
-
-    def visit(self, obj):
-        return obj.accept(self)
-
-    def visit_task(self, obj):
-        for value in obj.get('where', {}).values():
-            self.visit(value)
-
-    def visit_dir(self, obj):
-        if obj not in self._seen:
-            self.dirs.append(obj)
-            self._seen.add(obj)
-
-
-@attr.s
-class Progress:
-    url = attr.ib()
-    complete = attr.ib()
-    temp_file = attr.ib()
-    value = attr.ib(0)
-    error = attr.ib(None)
-
-
-def _download(state):
-    downloaded = 0
-    response = requests.get(state.url)
-    response.raise_for_status()
-    for chunk in response.iter_content(64 * 1024):
-        state.temp_file.write(chunk)
-        downloaded += len(chunk)
-        state.value = downloaded
-
-
-def _download_worker(input_queue, *, loop):
-    while True:
-        state = yield from input_queue.get()
-        try:
-            yield from loop.run_in_executor(None, _download, state)
-        except Exception as e:
-            state.error = str(e)
-            raise
-        finally:
-            state.complete.set()
-
-
-@coroutine
-def _download_workers(input_queue, concurrency, *, loop):
-    pending = [loop.create_task(_download_worker(input_queue, loop=loop))
-               for _ in range(concurrency)]
-    try:
-        # fast exit on first error
-        _, pending = yield from wait(pending, loop=loop,
-                                     return_when=FIRST_EXCEPTION)
-    finally:
-        for task in pending:
-            yield from terminate(task, loop=loop)
-
-
-@contextmanager
-def download_states(tasks, *, loop):
-    downloads_visitor = DownloadsVisitor()
-    for task in tasks:
-        downloads_visitor.visit_task(task)
-    states = [Progress(d.url, Event(loop=loop), tempfile.NamedTemporaryFile())
-              for d in downloads_visitor.downloads]
-    try:
-        yield states
-    finally:
-        for state in states:
-            state.temp_file.close()
-
-
-@coroutine
-def download(states, concurrency=2, *, loop):
-    input_queue = Queue(loop=loop)
-    for state in states:
-        yield from input_queue.put(state)
-
-    download_task = loop.create_task(_download_workers(input_queue, concurrency,
-                                                       loop=loop))
-    pending = {download_task}.union({ensure_future(state.complete.wait(),
-                                                   loop=loop)
-                                     for state in states})
-    try:
-        while True:
-            done, pending = yield from wait(pending, loop=loop,
-                                            return_when=FIRST_COMPLETED)
-            if download_task in done or pending == {download_task}:
-                break
-    finally:
-        for task in pending:
-            yield from terminate(task, loop=loop)
-
-
-@attr.s
-class DirState:
-    path = attr.ib()
-    complete = attr.ib()
-    temp_file = attr.ib()
-    error = attr.ib(None)
-
-
-def _packer(state_path, state_temp_file):
-    dir_path = Path(state_path).resolve()  # FIXME: raises FileNotFoundError
+def bundle(action_path, file_name):
+    dir_path = Path(action_path).resolve()  # FIXME: raises FileNotFoundError
     assert dir_path.is_dir(), dir_path
 
     cur_path = Path('.').resolve()
@@ -167,8 +98,8 @@ def _packer(state_path, state_temp_file):
         # TODO: ability to exclude (.gitignore? .hgignore?)
         return True
 
-    with open(state_temp_file, 'wb+') as tmp:
-        with tarfile.open(mode='w:tar', fileobj=tmp) as tar:
+    with open(file_name, 'wb+') as tf:
+        with tarfile.open(mode='w:tar', fileobj=tf) as tar:
             for path, _, names in os.walk(str(rel_path)):
                 if not filter_(path):
                     continue
@@ -187,109 +118,227 @@ def _packer(state_path, state_temp_file):
                                     fileobj=f)
 
 
-@contextmanager
-def dir_states(tasks, *, loop):
-    dirs_visitor = DirsVisitor()
+def get_action_states(tasks, *, loop):
+    actions = {}
     for task in tasks:
-        dirs_visitor.visit_task(task)
-    states = [DirState(d.path, Event(loop=loop), tempfile.NamedTemporaryFile())
-              for d in dirs_visitor.dirs]
-    try:
-        yield states
-    finally:
-        for state in states:
-            state.temp_file.close()
+        for value in task.where.values():
+            result = Result(tempfile.NamedTemporaryFile())
+            actions[value] = ActionState(Event(loop=loop),
+                                         result)
+    return actions
 
 
 @coroutine
-def pack(states, *, loop, pool):
-    pending = [loop.run_in_executor(pool, _packer, state.path,
-                                    state.temp_file.name)
-               for state in states]
+def wait_actions(task, states, *, loop):
+    waits = [states[action].complete.wait()
+             for action in task.where.values()]
+    if waits:
+        yield from gather(*waits, loop=loop)
 
-    states_map = dict(zip(pending, states))
+
+class ActionDispatcher:
+
+    def __init__(self, states, io_queue, cpu_queue):
+        self.states = states
+        self.io_queue = io_queue
+        self.cpu_queue = cpu_queue
+
+    @classmethod
+    def dispatch(cls, states, io_queue, cpu_queue):
+        dispatcher = cls(states, io_queue, cpu_queue)
+        for action in states:
+            dispatcher.visit(action)
+
+    def visit(self, obj):
+        return obj.accept(self)
+
+    def visit_download(self, obj):
+        yield from self.io_queue.put((obj, self.states[obj]))
+
+
+class IOExecutor:
+
+    def __init__(self, *, loop):
+        self.loop = loop
+
+    def visit(self, action):
+        return action.accept(self)
+
+    @coroutine
+    def download(self, action, state):
+        try:
+            yield from self.loop.run_in_executor(
+                None,
+                download, action.url, state.result.file.name,
+            )
+        except Exception as err:
+            state.error = str(err)
+            raise
+        finally:
+            state.complete.set()
+
+    def visit_download(self, obj):
+        return self.download
+
+
+class CPUExecutor:
+
+    def __init__(self, process_pool, *, loop):
+        self.process_pool = process_pool
+        self.loop = loop
+
+    def visit(self, action):
+        return action.accept(self)
+
+    @coroutine
+    def bundle(self, action, state):
+        try:
+            yield from self.loop.run_in_executor(
+                self.process_pool,
+                bundle, action.path, state.result.file.name,
+            )
+        except Exception as err:
+            state.error = str(err)
+            raise
+        finally:
+            state.complete.set()
+
+    def visit_bundle(self, obj):
+        return self.bundle
+
+
+@coroutine
+def worker(queue, executor):
+    while True:
+        action, state = yield from queue.get()
+        process = executor.visit(action)
+        yield from process(action, state)
+
+
+@coroutine
+def pool(queue, executor, concurrency=2, *, loop):
+    pending = [loop.create_task(worker(queue, executor))
+               for _ in range(concurrency)]
     try:
-        while True:
-            done, pending = yield from wait(pending,
-                                            return_when=FIRST_COMPLETED)
-            for task in done:
-                state = states_map[task]
-                error = task.exception()
-                if error:
-                    state.error = error
-                state.complete.set()
-            if not pending:
-                break
+        # fast exit on first error
+        _, pending = yield from wait(pending, loop=loop,
+                                     return_when=FIRST_EXCEPTION)
     finally:
         for task in pending:
             yield from terminate(task, loop=loop)
 
 
-def test_simple():
-    task = {
-        'run': 'feeds {{maude}}',
-        'where': {
-            'maude': 'pullus',
+@coroutine
+def run(client, task, states, *, loop):
+    print('run', client, task, states)
+
+
+@coroutine
+def build(client, tasks, *, loop):
+    io_queue = Queue()
+    io_executor = IOExecutor(loop=loop)
+
+    process_pool = ProcessPoolExecutor()
+    cpu_queue = Queue()
+    cpu_executor = CPUExecutor(process_pool, loop=loop)
+
+    states = get_action_states(tasks, loop=loop)
+    io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
+    cpu_pool_task = loop.create_task(pool(cpu_queue, cpu_executor, loop=loop))
+
+    try:
+        ActionDispatcher.dispatch(states, io_queue, cpu_queue)
+
+        for task in tasks:
+            task_states = {action: states[action]
+                           for action, state in task.where.values()}
+
+            yield from wait_actions(task, task_states, loop=loop)
+            # TODO: check errors
+            yield from run(client, task, task_states, loop=loop)
+            # TODO: commit
+        # TODO: finalize
+
+    finally:
+        yield from terminate(io_pool_task, loop=loop)
+        yield from terminate(cpu_pool_task, loop=loop)
+        process_pool.shutdown()
+        for state in states.values():
+            state.result.close()
+
+
+def test_compile_task():
+    task = Task(
+        run='feeds {{maude}}',
+        where={
+            'maude': Download('pullus'),
         },
-    }
-    assert compile_task(task) == 'feeds pullus'
+    )
+
+    mock = Mock()
+    mock.name = 'pullus'
+
+    states = {Download('pullus'): ActionState(None, Result(mock))}
+
+    name = hashlib.sha1(mock.name.encode('utf-8')).hexdigest()
+    assert compile_task(task, states) == 'feeds {}'.format(name)
 
 
-def test_download():
-    task = {
-        'where': {
-            'adiabat': Download('thorow'),
-        },
-    }
-    downloads_visitor = DownloadsVisitor()
-    downloads_visitor.visit_task(task)
-    assert downloads_visitor.downloads == [Download('thorow')]
-
-
-@pytest.mark.asyncio
-def test_real_download(event_loop):
-    task = {
-        'where': {
-            'adiabat': Download('http://localhost:6789/'),
-        },
-    }
+def server(content, *, loop):
+    host, port = 'localhost', 6789
 
     @coroutine
-    def handle(request):
-        return web.Response(body=b'oiVeFletchHeloiseSamosasWearer')
+    def handle(_):
+        return web.Response(body=content)
 
-    app = web.Application(loop=event_loop)
+    app = web.Application(loop=loop)
     app.router.add_get('/', handle)
     handler = app.make_handler()
 
-    server = yield from event_loop.create_server(handler, 'localhost', 6789)
+    srv = yield from loop.create_server(handler, host, port)
     yield from app.startup()
-    try:
-        with download_states([task], loop=event_loop) as states:
-            yield from download(states, loop=event_loop)
-            f = states[0].temp_file
-            f.seek(0)
-            assert f.read() == b'oiVeFletchHeloiseSamosasWearer'
-    finally:
-        server.close()
-        yield from server.wait_closed()
+
+    @coroutine
+    def close():
+        srv.close()
+        yield from srv.wait_closed()
         yield from app.shutdown()
         yield from handler.finish_connections(1)
         yield from app.cleanup()
 
+    url = 'http://{}:{}/'.format(host, port)
+    return url, close
+
 
 @pytest.mark.asyncio
-def test_dir(event_loop):
-    task = {
-        'where': {
-            'slaw': Dir('pi/ui'),
-        },
-    }
-    with ProcessPoolExecutor(1) as pool:
-        with dir_states([task], loop=event_loop) as states:
-            yield from pack(states, loop=event_loop, pool=pool)
+def test_download(loop):
+    content = b'oiVeFletchHeloiseSamosasWearer'
+    url, close = yield from server(content, loop=loop)
+    try:
+        action = Download(url)
+        task = Task('whatever', where={'slaw': action})
+        states = get_action_states([task], loop=loop)
+        state = states[action]
+        with closing(state.result):
+            executor = IOExecutor(loop=loop)
+            process = executor.visit(action)
+            yield from process(action, state)
+            state.result.file.seek(0)
+            assert state.result.file.read() == content
+    finally:
+        yield from close()
 
-            state, = states
-            assert state.complete.is_set()
-            with tarfile.open(state.temp_file.name) as tmp:
+
+@pytest.mark.asyncio
+def test_bundle(loop):
+    action = Bundle('pi/ui')
+    task = Task('whatever', where={'twihard': action})
+    states = get_action_states([task], loop=loop)
+    state = states[action]
+    with closing(state.result):
+        with ProcessPoolExecutor() as process_pool:
+            executor = CPUExecutor(process_pool, loop=loop)
+            process = executor.visit(action)
+            yield from process(action, state)
+            with tarfile.open(state.result.file.name) as tmp:
                 assert 'pi/ui/__init__.py' in tmp.getnames()

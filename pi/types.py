@@ -289,8 +289,14 @@ class SubCommand(CommandType, MappingConstruct):
         return visitor.visit_subcommand(self)
 
 
+class ActionType:
+
+    def accept(self, visitor):
+        raise NotImplementedError
+
+
 @attr.s
-class Download(ScalarConstruct):
+class Download(ActionType, ScalarConstruct):
     __tag__ = '!Download'
 
     url = attr.ib()
@@ -300,10 +306,10 @@ class Download(ScalarConstruct):
 
 
 @attr.s
-class Dir(ScalarConstruct):
-    __tag__ = '!Dir'
+class Bundle(ActionType, ScalarConstruct):
+    __tag__ = '!Bundle'
 
     path = attr.ib()
 
     def accept(self, visitor):
-        return visitor.visit_dir(self)
+        return visitor.visit_bundle(self)
