@@ -149,6 +149,9 @@ class AsyncClient:
     def stop(self, *args, **kwargs):
         return self._exec(self._client.stop, *args, **kwargs)
 
+    def kill(self, *args, **kwargs):
+        return self._exec(self._client.kill, *args, **kwargs)
+
     def resize(self, *args, **kwargs):
         return self._exec(self._client.resize, *args, **kwargs)
 

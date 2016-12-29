@@ -1,4 +1,5 @@
 import sys
+import signal
 import socket
 import os.path
 import logging
@@ -179,6 +180,7 @@ def attach(client, container, input_fd, *, loop, wait_exit=3):
         try:
             exit_code = yield from client.wait(container)
         except CancelledError:
+            yield from client.kill(container, signal.SIGINT)
             yield from client.stop(container, timeout=wait_exit)
             yield from terminate(socket_reader_task, loop=loop)
 
