@@ -12,6 +12,7 @@
         - aiohttp==1.0.5
         - pytest==3.0.5
         - pytest-asyncio==0.5.0
+        - flake8==3.2.1
 
 - !Image
   name: docs
@@ -27,6 +28,11 @@
   name: test
   image: test
   exec: py.test tests
+
+- !SubCommand
+  name: lint
+  image: test
+  exec: flake8
 
 - !ShellCommand
   name: build docs

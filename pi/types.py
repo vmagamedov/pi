@@ -11,7 +11,7 @@
 from enum import Enum
 
 from ._requires import attr
-from ._requires.typing import Optional, Union, Any, Sequence, Mapping
+from ._requires.typing import Optional, Union, Any, Sequence, Mapping  # noqa
 
 from .utils import ImmutableDict
 
