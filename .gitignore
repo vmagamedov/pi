@@ -1,9 +1,9 @@
-pi/_requires/*
-pi/_res/dumb-init
-pi/_res/python/*
-build
-dist
-env
+/pi/_requires/*
+/pi/_res/dumb-init
+/pi/_res/python/*
+/build
+/dist
+/env
 *.egg-info
 *.pyc
 *.pyo

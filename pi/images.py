@@ -182,3 +182,28 @@ class Pusher:
         with output as reader:
             success = yield from _echo_download_progress(reader)
             return success
+
+
+class Builder(object):
+
+    def __init__(self, client, layer, *, loop):
+        self.client = client
+        self.layer = layer
+        self.loop = loop
+
+    def visit(self, obj):
+        return obj.accept(self)
+
+    @coroutine
+    def visit_dockerfile(self, obj):
+        from .build.dockerfile import build
+
+        result = yield from build(self.client, self.layer, obj)
+        return result
+
+    @coroutine
+    def visit_ansibletasks(self, obj):
+        from .build.ansible import build
+
+        result = yield from build(self.client, self.layer, obj, loop=self.loop)
+        return result
