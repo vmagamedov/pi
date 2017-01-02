@@ -50,6 +50,7 @@ Loader.register(types.LocalPath)
 Loader.register(types.NamedVolume)
 Loader.register(types.Expose)
 Loader.register_enum(types.Mode)
+Loader.register(types.Tasks)
 Loader.register(types.Download)
 Loader.register(types.Bundle)
 

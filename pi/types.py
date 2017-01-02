@@ -289,6 +289,16 @@ class SubCommand(CommandType, MappingConstruct):
         return visitor.visit_subcommand(self)
 
 
+@attr.s
+class Tasks(ProvisionType, SequenceConstruct):
+    __tag__ = '!Tasks'
+
+    items = attr.ib(hash=False)  # type: list
+
+    def accept(self, visitor):
+        return visitor.visit_tasks(self)
+
+
 class ActionType:
 
     def accept(self, visitor):

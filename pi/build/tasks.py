@@ -13,6 +13,7 @@ from .._requires import attr
 from .._requires import jinja2
 from .._requires import requests
 
+from ..types import Tasks, ActionType
 from ..utils import terminate
 
 
@@ -62,10 +63,13 @@ class ActionState:
 
 
 def compile_task(task: Task, states):
-    template = task.run
-    params = {key: states[action].result.value()
-              for key, action in task.where.items()}
-    t = jinja2.Template(template)
+    params = {}
+    for key, value in task.where.items():
+        if isinstance(value, ActionType):
+            value = states[value].result.value()
+        params[key] = value
+
+    t = jinja2.Template(task.run)
     return t.render(params)
 
 
@@ -112,22 +116,26 @@ def bundle(action_path, file_name):
                                     fileobj=f)
 
 
+def iter_actions(task):
+    for key, value in task.where.items():
+        if isinstance(value, ActionType):
+            yield key, value
+
+
 def get_action_states(tasks, *, loop):
     actions = {}
     for task in tasks:
-        for value in task.where.values():
+        for _, action in iter_actions(task):
             result = Result(tempfile.NamedTemporaryFile())
-            actions[value] = ActionState(Event(loop=loop),
-                                         result)
+            actions[action] = ActionState(Event(loop=loop), result)
     return actions
 
 
 @coroutine
-def wait_actions(task, states, *, loop):
-    waits = [states[action].complete.wait()
-             for action in task.where.values()]
-    if waits:
-        yield from gather(*waits, loop=loop)
+def wait_actions(states, *, loop):
+    if states:
+        yield from gather(*[state.complete.wait() for state in states.values()],
+                          loop=loop)
 
 
 class ActionDispatcher:
@@ -224,11 +232,13 @@ def pool(queue, executor, concurrency=2, *, loop):
 
 @coroutine
 def run(client, task, states, *, loop):
-    print('run', client, task, states)
+    print('run:', compile_task(task, states))
 
 
 @coroutine
-def build(client, tasks, *, loop):
+def build(client, layer, tasks: Tasks, *, loop):
+    task_items = [Task(**d) for d in tasks.items]
+
     io_queue = Queue()
     io_executor = IOExecutor(loop=loop)
 
@@ -236,22 +246,23 @@ def build(client, tasks, *, loop):
     cpu_queue = Queue()
     cpu_executor = CPUExecutor(process_pool, loop=loop)
 
-    states = get_action_states(tasks, loop=loop)
+    states = get_action_states(task_items, loop=loop)
     io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
     cpu_pool_task = loop.create_task(pool(cpu_queue, cpu_executor, loop=loop))
 
     try:
         ActionDispatcher.dispatch(states, io_queue, cpu_queue)
 
-        for task in tasks:
-            task_states = {action: states[action]
-                           for action, state in task.where.values()}
+        for task in task_items:
+            task_states = dict(iter_actions(task))
+            yield from wait_actions(task_states, loop=loop)
 
-            yield from wait_actions(task, task_states, loop=loop)
             # TODO: check errors
             yield from run(client, task, task_states, loop=loop)
             # TODO: commit
         # TODO: finalize
+
+        return True
 
     finally:
         yield from terminate(io_pool_task, loop=loop)

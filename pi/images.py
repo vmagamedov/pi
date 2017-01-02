@@ -19,6 +19,10 @@ class _HashableChunks:
     def visit_ansibletasks(self, obj):
         yield repr(obj.tasks).encode('utf-8')
 
+    def visit_tasks(self, obj):
+        # FIXME: implement proper hashing
+        yield repr(obj).encode('utf-8')
+
 
 class Layer:
     _hash = None
@@ -204,6 +208,13 @@ class Builder(object):
     @coroutine
     def visit_ansibletasks(self, obj):
         from .build.ansible import build
+
+        result = yield from build(self.client, self.layer, obj, loop=self.loop)
+        return result
+
+    @coroutine
+    def visit_tasks(self, obj):
+        from .build.tasks import build
 
         result = yield from build(self.client, self.layer, obj, loop=self.loop)
         return result

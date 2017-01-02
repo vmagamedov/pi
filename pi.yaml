@@ -24,6 +24,18 @@
         - sphinx==1.4.8
         - sphinx_rtd_theme==0.1.10a0
 
+- !Image
+  name: tasks-test
+  from: !DockerImage python:3.5.2-alpine
+  repository: reg.local/pi/tasks-test
+  provision-with: !Tasks
+  - run: pip3 install --no-deps {{packages|join(" ")}}
+    where:
+      packages:
+        - requests==3.2
+        - sqlalchemy==1.1
+  - run: sleep 1
+
 - !SubCommand
   name: test
   image: test
