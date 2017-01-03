@@ -5,6 +5,7 @@ import os.path
 import logging
 
 from asyncio import Queue, CancelledError, Event, coroutine
+from asyncio import TimeoutError as AIOTimeoutError, wait_for
 
 from ._requires import click
 
@@ -157,7 +158,7 @@ def resize(client, container):
 
 
 @coroutine
-def attach(client, container, input_fd, *, loop, wait_exit=3):
+def attach(client, container, input_fd, *, loop, wait_exit=10):
     params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
     with (yield from client.attach_socket(container, params)) as sock_io:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
@@ -181,8 +182,10 @@ def attach(client, container, input_fd, *, loop, wait_exit=3):
             exit_code = yield from client.wait(container)
         except CancelledError:
             yield from client.kill(container, signal.SIGINT)
-            yield from client.stop(container, timeout=wait_exit)
-            yield from terminate(socket_reader_task, loop=loop)
+            try:
+                yield from wait_for(socket_reader_task, wait_exit, loop=loop)
+            except AIOTimeoutError:
+                yield from client.kill(container, signal.SIGKILL)
 
         yield from terminate(stdout_writer_task, loop=loop)
         yield from terminate(stdin_reader_task, loop=loop)
