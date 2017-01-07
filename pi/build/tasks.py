@@ -1,4 +1,5 @@
 import os
+import uuid
 import tarfile
 import hashlib
 import tempfile
@@ -36,6 +37,7 @@ class ResultBase:
 @attr.s
 class Result(ResultBase):
     file = attr.ib()
+    uuid = attr.ib(default=attr.Factory(lambda: uuid.uuid4().hex))
 
     def value(self):
         return hashlib.sha1(self.file.name.encode('utf-8')).hexdigest()
@@ -62,28 +64,26 @@ class ActionState:
     error = attr.ib(default=None)
 
 
-def compile_task(task: Task, states):
-    params = {}
-    for key, value in task.where.items():
-        if isinstance(value, ActionType):
-            value = states[value].result.value()
-        params[key] = value
-
+def compile_task(task: Task, ctx):
     t = jinja2.Template(task.run)
-    return t.render(params)
+    return t.render(ctx)
 
 
-def download(url, file_name):
-    with open(file_name, 'wb') as f:
-        # downloaded = 0
-        response = requests.get(url)
-        response.raise_for_status()
-        for chunk in response.iter_content(64 * 1024):
-            f.write(chunk)
-            # downloaded += len(chunk)
+def download(url, file_name, destination):
+    with tempfile.NamedTemporaryFile() as tmp:
+        with tarfile.open(file_name, mode='w:tar') as tar:
+            # downloaded = 0
+            response = requests.get(url)
+            response.raise_for_status()
+            for chunk in response.iter_content(64 * 1024):
+                tmp.write(chunk)
+                # downloaded += len(chunk)
+            tmp.seek(0)
+            tar.addfile(tar.gettarinfo(arcname=destination, fileobj=tmp),
+                        fileobj=tmp)
 
 
-def bundle(action_path, file_name):
+def bundle(action_path, file_name, destination):
     dir_path = Path(action_path).resolve()  # FIXME: raises FileNotFoundError
     assert dir_path.is_dir(), dir_path
 
@@ -96,36 +96,38 @@ def bundle(action_path, file_name):
         # TODO: ability to exclude (.gitignore? .hgignore?)
         return True
 
-    with open(file_name, 'wb+') as tf:
-        with tarfile.open(mode='w:tar', fileobj=tf) as tar:
-            for path, _, names in os.walk(str(rel_path)):
-                if not filter_(path):
+    def _arc_path(path_):
+        return os.path.join(destination, unicodedata.normalize('NFC', path_))
+
+    with tarfile.open(file_name, mode='w:tar') as tar:
+        for path, _, names in os.walk(str(rel_path)):
+            if not filter_(path):
+                continue
+
+            tar.addfile(tar.gettarinfo(path, _arc_path(path)))
+            for name in names:
+                file_path = os.path.join(path, name)
+                if not filter_(file_path):
                     continue
 
-                arc_path = unicodedata.normalize('NFC', path)
-                tar.addfile(tar.gettarinfo(path, arc_path))
-                for name in names:
-                    file_path = os.path.join(path, name)
-                    if not filter_(file_path):
-                        continue
-
-                    arc_file_path = unicodedata.normalize('NFC', file_path)
-                    with open(file_path, 'rb') as f:
-                        tar.addfile(tar.gettarinfo(file_path, arc_file_path,
-                                                   fileobj=f),
-                                    fileobj=f)
+                with open(file_path, 'rb') as f:
+                    tar.addfile(tar.gettarinfo(arcname=_arc_path(file_path),
+                                               fileobj=f),
+                                fileobj=f)
 
 
 def iter_actions(task):
-    for key, value in task.where.items():
+    for value in task.where.values():
         if isinstance(value, ActionType):
-            yield key, value
+            yield value
 
 
 def get_action_states(tasks, *, loop):
     actions = {}
     for task in tasks:
-        for _, action in iter_actions(task):
+        for action in iter_actions(task):
+            if action in actions:
+                continue
             result = Result(tempfile.NamedTemporaryFile())
             actions[action] = ActionState(Event(loop=loop), result)
     return actions
@@ -146,16 +148,22 @@ class ActionDispatcher:
         self.cpu_queue = cpu_queue
 
     @classmethod
+    @coroutine
     def dispatch(cls, states, io_queue, cpu_queue):
         dispatcher = cls(states, io_queue, cpu_queue)
         for action in states:
-            dispatcher.visit(action)
+            yield from dispatcher.visit(action)
 
     def visit(self, obj):
         return obj.accept(self)
 
+    @coroutine
     def visit_download(self, obj):
         yield from self.io_queue.put((obj, self.states[obj]))
+
+    @coroutine
+    def visit_bundle(self, obj):
+        yield from self.cpu_queue.put((obj, self.states[obj]))
 
 
 class IOExecutor:
@@ -171,7 +179,7 @@ class IOExecutor:
         try:
             yield from self.loop.run_in_executor(
                 None,
-                download, action.url, state.result.file.name,
+                download, action.url, state.result.file.name, state.result.uuid
             )
         except Exception as err:
             state.error = str(err)
@@ -197,11 +205,10 @@ class CPUExecutor:
         try:
             yield from self.loop.run_in_executor(
                 self.process_pool,
-                bundle, action.path, state.result.file.name,
+                bundle, action.path, state.result.file.name, state.result.uuid
             )
         except Exception as err:
             state.error = str(err)
-            raise
         finally:
             state.complete.set()
 
@@ -231,12 +238,24 @@ def pool(queue, executor, concurrency=2, *, loop):
 
 
 @coroutine
-def run(client, task, states, *, loop):
-    print('run:', compile_task(task, states))
+def run(client, task, results, *, loop):
+    ctx = {key: value if not isinstance(value, ActionType) else results[value]
+           for key, value in task.where.items()}
+    print('run:', compile_task(task, ctx))
+
+
+def _sh(client, container, cmd):
+    exec_id = yield from client.exec_create(container, cmd)
+    yield from client.exec_start(exec_id)
 
 
 @coroutine
 def build(client, layer, tasks: Tasks, *, loop):
+    if layer.parent:
+        from_ = layer.parent.docker_image()
+    else:
+        from_ = layer.image.from_
+
     task_items = [Task(**d) for d in tasks.items]
 
     io_queue = Queue()
@@ -247,21 +266,51 @@ def build(client, layer, tasks: Tasks, *, loop):
     cpu_executor = CPUExecutor(process_pool, loop=loop)
 
     states = get_action_states(task_items, loop=loop)
+    submitted_states = set()
+
     io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
     cpu_pool_task = loop.create_task(pool(cpu_queue, cpu_executor, loop=loop))
 
+    c = yield from client.create_container(
+        from_.name, '/bin/sh', detach=True, tty=True,
+    )
     try:
-        ActionDispatcher.dispatch(states, io_queue, cpu_queue)
+        yield from client.start(c)
+        yield from _sh(client, c, ['mkdir', '/.pi'])
+
+        yield from ActionDispatcher.dispatch(states, io_queue, cpu_queue)
 
         for task in task_items:
-            task_states = dict(iter_actions(task))
+            task_states = {action: states[action]
+                           for action in iter_actions(task)}
+
             yield from wait_actions(task_states, loop=loop)
 
-            # TODO: check errors
-            yield from run(client, task, task_states, loop=loop)
-            # TODO: commit
-        # TODO: finalize
+            errors = {action: state.error
+                      for action, state in task_states.items()
+                      if state.error is not None}
+            if errors:
+                raise Exception(repr(errors))
 
+            task_results = {action: '/.pi/{}'.format(state.result.uuid)
+                            for action, state in task_states.items()}
+
+            for action, state in task_states.items():
+                if action not in submitted_states:
+                    with open(state.result.file.name, 'rb') as tar:
+                        yield from client.put_archive(c, '/.pi', tar)
+                    submitted_states.add(action)
+
+            yield from run(client, task, task_results, loop=loop)
+
+        yield from _sh(client, c, ['rm', '-rf', '/.pi'])
+        yield from client.pause(c)
+        yield from client.commit(
+            c,
+            layer.image.repository,
+            layer.version(),
+        )
+        yield from client.unpause(c)
         return True
 
     finally:
@@ -270,3 +319,4 @@ def build(client, layer, tasks: Tasks, *, loop):
         process_pool.shutdown()
         for state in states.values():
             state.result.close()
+        yield from client.remove_container(c, v=True, force=True)

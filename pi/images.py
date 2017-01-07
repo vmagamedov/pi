@@ -20,8 +20,9 @@ class _HashableChunks:
         yield repr(obj.tasks).encode('utf-8')
 
     def visit_tasks(self, obj):
-        # FIXME: implement proper hashing
-        yield repr(obj).encode('utf-8')
+        for task in obj.items:
+            yield task['run'].encode('utf-8')
+            yield repr(task.get('where')).encode('utf-8')
 
 
 class Layer:

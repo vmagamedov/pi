@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from ._requires import attr
 
-from .utils import MessageType
+from .utils import MessageType, terminate
 from .types import DockerImage, Dockerfile
 from .images import Puller, Builder
 
@@ -223,6 +223,6 @@ def resolve(client, layers, services, obj, *, loop,
                     deps_map.clear()
 
     finally:
-        puller_task.cancel()
-        builder_task.cancel()
+        yield from terminate(puller_task, loop=loop)
+        yield from terminate(builder_task, loop=loop)
     return failed

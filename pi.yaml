@@ -35,6 +35,9 @@
         - requests==3.2
         - sqlalchemy==1.1
   - run: sleep 1
+  - run: python3 {{get_pip_py}}
+    where:
+      get_pip_py: !Download "https://bootstrap.pypa.io/get-pip.py"
 
 - !SubCommand
   name: test
