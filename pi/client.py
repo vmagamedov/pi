@@ -131,6 +131,9 @@ class AsyncClient:
     def exec_start(self, *args, **kwargs):
         return self._exec(self._client.exec_start, *args, **kwargs)
 
+    def exec_inspect(self, *args, **kwargs):
+        return self._exec(self._client.exec_inspect, *args, **kwargs)
+
     def pause(self, *args, **kwargs):
         return self._exec(self._client.pause, *args, **kwargs)
 

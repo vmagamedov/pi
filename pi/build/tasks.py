@@ -64,11 +64,6 @@ class ActionState:
     error = attr.ib(default=None)
 
 
-def compile_task(task: Task, ctx):
-    t = jinja2.Template(task.run)
-    return t.render(ctx)
-
-
 def download(url, file_name, destination):
     with tempfile.NamedTemporaryFile() as tmp:
         with tarfile.open(file_name, mode='w:tar') as tar:
@@ -237,16 +232,22 @@ def pool(queue, executor, concurrency=2, *, loop):
             yield from terminate(task, loop=loop)
 
 
-@coroutine
-def run(client, task, results, *, loop):
+def task_cmd(task, results):
     ctx = {key: value if not isinstance(value, ActionType) else results[value]
            for key, value in task.where.items()}
-    print('run:', compile_task(task, ctx))
+    t = jinja2.Template(task.run)
+    return t.render(ctx)
 
 
-def _sh(client, container, cmd):
+@coroutine
+def _exec(client, container, cmd):
     exec_id = yield from client.exec_create(container, cmd)
-    yield from client.exec_start(exec_id)
+    output = yield from client.exec_start(exec_id)
+    info = yield from client.exec_inspect(exec_id)
+    exit_code = info['ExitCode']
+    if exit_code:
+        print(output)  # FIXME: proper output
+    return exit_code
 
 
 @coroutine
@@ -276,7 +277,9 @@ def build(client, layer, tasks: Tasks, *, loop):
     )
     try:
         yield from client.start(c)
-        yield from _sh(client, c, ['mkdir', '/.pi'])
+        exit_code = yield from _exec(client, c, ['mkdir', '/.pi'])
+        if exit_code:
+            return False
 
         yield from ActionDispatcher.dispatch(states, io_queue, cpu_queue)
 
@@ -301,9 +304,16 @@ def build(client, layer, tasks: Tasks, *, loop):
                         yield from client.put_archive(c, '/.pi', tar)
                     submitted_states.add(action)
 
-            yield from run(client, task, task_results, loop=loop)
+            cmd = task_cmd(task, task_results)
+            print('run: {}'.format(cmd))
+            exit_code = yield from _exec(client, c, cmd)
+            if exit_code:
+                return False
 
-        yield from _sh(client, c, ['rm', '-rf', '/.pi'])
+        exit_code = yield from _exec(client, c, ['rm', '-rf', '/.pi'])
+        if exit_code:
+            return False
+
         yield from client.pause(c)
         yield from client.commit(
             c,
