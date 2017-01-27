@@ -1,4 +1,5 @@
 import os
+import math
 import uuid
 import tarfile
 import hashlib
@@ -241,12 +242,14 @@ def task_cmd(task, results):
 
 @coroutine
 def _exec(client, container, cmd):
+    if isinstance(cmd, str):
+        cmd = ['/bin/sh', '-c', cmd]
     exec_id = yield from client.exec_create(container, cmd)
     output = yield from client.exec_start(exec_id)
     info = yield from client.exec_inspect(exec_id)
     exit_code = info['ExitCode']
     if exit_code:
-        print(output)  # FIXME: proper output
+        print(output.decode('utf-8'))  # FIXME: proper output
     return exit_code
 
 
@@ -283,7 +286,10 @@ def build(client, layer, tasks: Tasks, *, loop):
 
         yield from ActionDispatcher.dispatch(states, io_queue, cpu_queue)
 
-        for task in task_items:
+        total = len(task_items)
+        padding = math.ceil(math.log10(total + 1))
+
+        for i, task in enumerate(task_items, 1):
             task_states = {action: states[action]
                            for action in iter_actions(task)}
 
@@ -305,7 +311,8 @@ def build(client, layer, tasks: Tasks, *, loop):
                     submitted_states.add(action)
 
             cmd = task_cmd(task, task_results)
-            print('run: {}'.format(cmd))
+            current_index = '{{:{}d}}'.format(padding).format(i)
+            print('[{}/{}] {}'.format(current_index, total, cmd))
             exit_code = yield from _exec(client, c, cmd)
             if exit_code:
                 return False
