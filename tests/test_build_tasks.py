@@ -1,9 +1,7 @@
 import tarfile
-import hashlib
 
 from asyncio import coroutine
 from contextlib import closing
-from unittest.mock import Mock
 from concurrent.futures import ProcessPoolExecutor
 
 import pytest
@@ -11,25 +9,20 @@ import pytest
 from aiohttp import web
 
 from pi.types import Download, Bundle
-from pi.build.tasks import ActionState, compile_task, Task, get_action_states
-from pi.build.tasks import Result, IOExecutor, CPUExecutor
+from pi.build.tasks import task_cmd, Task, get_action_states
+from pi.build.tasks import IOExecutor, CPUExecutor
 
 
-def test_compile_task():
+def test_task_cmd():
     task = Task(
         run='feeds {{maude}}',
         where={
             'maude': Download('pullus'),
         },
     )
-
-    mock = Mock()
-    mock.name = 'pullus'
-
-    states = {Download('pullus'): ActionState(None, Result(mock))}
-
-    name = hashlib.sha1(mock.name.encode('utf-8')).hexdigest()
-    assert compile_task(task, states) == 'feeds {}'.format(name)
+    download_path = '/hart/ruby/rumors'
+    results = {Download('pullus'): download_path}
+    assert task_cmd(task, results) == 'feeds {}'.format(download_path)
 
 
 def server(content, *, loop):
@@ -71,8 +64,10 @@ def test_download(loop):
             executor = IOExecutor(loop=loop)
             process = executor.visit(action)
             yield from process(action, state)
-            state.result.file.seek(0)
-            assert state.result.file.read() == content
+            with tarfile.open(state.result.file.name) as tmp_tar:
+                assert state.result.uuid in tmp_tar.getnames()
+                with tmp_tar.extractfile(state.result.uuid) as f:
+                    assert f.read() == content
     finally:
         yield from close()
 
@@ -89,4 +84,5 @@ def test_bundle(loop):
             process = executor.visit(action)
             yield from process(action, state)
             with tarfile.open(state.result.file.name) as tmp:
-                assert 'pi/ui/__init__.py' in tmp.getnames()
+                file_path = '{}/pi/ui/__init__.py'.format(state.result.uuid)
+                assert file_path in tmp.getnames()

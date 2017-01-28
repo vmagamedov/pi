@@ -42,7 +42,7 @@
 - !SubCommand
   name: test
   image: test
-  exec: py.test tests
+  exec: py.test
 
 - !SubCommand
   name: lint
