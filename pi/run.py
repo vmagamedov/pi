@@ -153,7 +153,7 @@ async def resize(client, container):
 
 async def attach(client, container, input_fd, *, loop, wait_exit=10):
     params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
-    with (await client.attach_socket(container, params)) as sock_io:
+    async with client.attach_socket(container, params) as sock_io:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
                              fileno=sock_io.fileno())
         sock.setblocking(False)

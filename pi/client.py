@@ -87,6 +87,19 @@ class _Client(Client):
             raise APIError('Error', response)
 
 
+class _AsyncContextManagerAdapter:
+
+    def __init__(self, func):
+        self._func = func
+
+    async def __aenter__(self):
+        self._ctx = await self._func()
+        return self._ctx.__enter__()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self._ctx.__exit__(exc_type, exc_val, exc_tb)
+
+
 class AsyncClient:
 
     def __init__(self, *, loop):
@@ -107,8 +120,11 @@ class AsyncClient:
     def images(self, *args, **kwargs):
         return self._exec(self._client.images, *args, **kwargs)
 
-    def build(self, *args, **kwargs):
-        return self._exec(self._client.build, *args, **kwargs)
+    def build(self, *args, stream=False, **kwargs):
+        def proc():
+            return self._exec(self._client.build, *args,
+                              stream=stream, **kwargs)
+        return _AsyncContextManagerAdapter(proc) if stream else proc()
 
     def create_container(self, *args, **kwargs):
         return self._exec(self._client.create_container, *args, **kwargs)
@@ -156,7 +172,9 @@ class AsyncClient:
         return self._exec(self._client.resize, *args, **kwargs)
 
     def attach_socket(self, *args, **kwargs):
-        return self._exec(self._client.attach_socket, *args, **kwargs)
+        def proc():
+            return self._exec(self._client.attach_socket, *args, **kwargs)
+        return _AsyncContextManagerAdapter(proc)
 
     def wait(self, *args, **kwargs):
         return self._exec(self._client.wait, *args, **kwargs)

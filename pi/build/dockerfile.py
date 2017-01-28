@@ -57,12 +57,7 @@ async def build(client, layer, dockerfile):
         from_stmt = 'FROM {}'.format(from_.name).encode('ascii')
         docker_file = ANCESTOR_RE.sub(from_stmt, docker_file)
 
-    with (await client.build(
-            tag=image.name,
-            fileobj=io.BytesIO(docker_file),
-            rm=True,
-            stream=True,
-            decode=True,
-    )) as output:
+    async with client.build(tag=image.name, fileobj=io.BytesIO(docker_file),
+                            rm=True, stream=True, decode=True) as output:
         result = await _echo_build_progress(client, output)
     return result
