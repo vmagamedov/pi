@@ -4,15 +4,17 @@
 
 - !Image
   name: test
-  from: !DockerImage python:3.4.5-alpine
+  from: !DockerImage alpine:3.5
   repository: reg.local/pi/test
-  provision-with: !AnsibleTasks
-    - pip: name={{item}} executable=pip3 extra_args='--no-cache-dir'
-      with_items:
-        - aiohttp==1.0.5
-        - pytest==3.0.5
-        - pytest-asyncio==0.5.0
-        - flake8==3.2.1
+  provision-with: !Tasks
+  - run: apk add --no-cache python3
+  - run: pip3 install --no-cache-dir --disable-pip-version-check {{packages|join(" ")}}
+    where:
+      packages:
+      - aiohttp==1.0.5
+      - pytest==3.0.5
+      - pytest-asyncio==0.5.0
+      - flake8==3.2.1
 
 - !Image
   name: docs

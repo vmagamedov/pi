@@ -4,7 +4,7 @@ Configure:
   $ cat > pi.yaml << EOF
   > - !Image
   >    name: app.env
-  >    from: !DockerImage alpine:3.4
+  >    from: !DockerImage alpine:3.5
   >    repository: app.env
   >    provision-with: !AnsibleTasks
   >      - file: path=/foo.ini state=touch
@@ -12,7 +12,7 @@ Configure:
 
 Setup:
 
-  $ docker rmi app.env:773df759057a > /dev/null 2>&1 || true
+  $ docker rmi $(docker images -q) > /dev/null 2>&1 || true
 
 Test:
 
