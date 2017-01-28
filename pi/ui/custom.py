@@ -1,7 +1,5 @@
 import sys
 
-from asyncio import coroutine
-
 from .._requires import click
 from .._requires import jinja2
 
@@ -96,9 +94,8 @@ def get_work_dir(volumes):
     return '.' if volumes is None else '/'
 
 
-@coroutine
-def _resolve(ctx, command, *, loop):
-    yield from resolve(
+async def _resolve(ctx, command, *, loop):
+    await resolve(
         ctx.client,
         ctx.layers,
         ctx.services,
@@ -109,11 +106,10 @@ def _resolve(ctx, command, *, loop):
     )
 
 
-@coroutine
-def _start_services(ctx, command):
+async def _start_services(ctx, command):
     services = [ctx.services.get(name)
                 for name in command.requires or []]
-    yield from ensure_running(ctx.client, ctx.namespace, services)
+    await ensure_running(ctx.client, ctx.namespace, services)
 
 
 class _CommandCreator:
@@ -131,11 +127,11 @@ class _CommandCreator:
 
         @click.pass_obj
         @async_cmd
-        def cb(ctx, **kw):
-            yield from _resolve(ctx, command, loop=ctx.loop)
+        async def cb(ctx, **kw):
+            await _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
-            yield from _start_services(ctx, command)
-            yield from ensure_network(ctx.client, ctx.network)
+            await _start_services(ctx, command)
+            await ensure_network(ctx.client, ctx.network)
 
             volumes = get_volumes(command.volumes)
             volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
@@ -145,7 +141,7 @@ class _CommandCreator:
                    render_template(command.eval, kw)]
 
             with config_tty(command.raw_input) as fd:
-                exit_code = yield from run(
+                exit_code = await run(
                     ctx.client, fd, docker_image, cmd,
                     loop=ctx.loop,
                     volumes=volumes,
@@ -169,15 +165,15 @@ class _CommandCreator:
 
         @click.pass_obj
         @async_cmd
-        def cb(ctx, args):
-            yield from _resolve(ctx, command, loop=ctx.loop)
+        async def cb(ctx, args):
+            await _resolve(ctx, command, loop=ctx.loop)
             docker_image = get_docker_image(ctx.layers, command.image)
-            yield from _start_services(ctx, command)
-            yield from ensure_network(ctx.client, ctx.network)
+            await _start_services(ctx, command)
+            await ensure_network(ctx.client, ctx.network)
 
             cmd = exec_ + args
             with config_tty(command.raw_input) as fd:
-                exit_code = yield from run(
+                exit_code = await run(
                     ctx.client, fd, docker_image, cmd,
                     loop=ctx.loop,
                     volumes=get_volumes(command.volumes),

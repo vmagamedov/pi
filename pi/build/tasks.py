@@ -7,7 +7,7 @@ import tempfile
 import unicodedata
 
 from pathlib import Path
-from asyncio import coroutine, wait, Queue, Event, gather, FIRST_EXCEPTION
+from asyncio import wait, Queue, Event, gather, FIRST_EXCEPTION
 
 from concurrent.futures import ProcessPoolExecutor
 
@@ -129,11 +129,10 @@ def get_action_states(tasks, *, loop):
     return actions
 
 
-@coroutine
-def wait_actions(states, *, loop):
+async def wait_actions(states, *, loop):
     if states:
-        yield from gather(*[state.complete.wait() for state in states.values()],
-                          loop=loop)
+        await gather(*[state.complete.wait() for state in states.values()],
+                     loop=loop)
 
 
 class ActionDispatcher:
@@ -144,22 +143,19 @@ class ActionDispatcher:
         self.cpu_queue = cpu_queue
 
     @classmethod
-    @coroutine
-    def dispatch(cls, states, io_queue, cpu_queue):
+    async def dispatch(cls, states, io_queue, cpu_queue):
         dispatcher = cls(states, io_queue, cpu_queue)
         for action in states:
-            yield from dispatcher.visit(action)
+            await dispatcher.visit(action)
 
     def visit(self, obj):
         return obj.accept(self)
 
-    @coroutine
-    def visit_download(self, obj):
-        yield from self.io_queue.put((obj, self.states[obj]))
+    async def visit_download(self, obj):
+        await self.io_queue.put((obj, self.states[obj]))
 
-    @coroutine
-    def visit_bundle(self, obj):
-        yield from self.cpu_queue.put((obj, self.states[obj]))
+    async def visit_bundle(self, obj):
+        await self.cpu_queue.put((obj, self.states[obj]))
 
 
 class IOExecutor:
@@ -170,10 +166,9 @@ class IOExecutor:
     def visit(self, action):
         return action.accept(self)
 
-    @coroutine
-    def download(self, action, state):
+    async def download(self, action, state):
         try:
-            yield from self.loop.run_in_executor(
+            await self.loop.run_in_executor(
                 None,
                 download, action.url, state.result.file.name, state.result.uuid
             )
@@ -196,10 +191,9 @@ class CPUExecutor:
     def visit(self, action):
         return action.accept(self)
 
-    @coroutine
-    def bundle(self, action, state):
+    async def bundle(self, action, state):
         try:
-            yield from self.loop.run_in_executor(
+            await self.loop.run_in_executor(
                 self.process_pool,
                 bundle, action.path, state.result.file.name, state.result.uuid
             )
@@ -212,25 +206,23 @@ class CPUExecutor:
         return self.bundle
 
 
-@coroutine
-def worker(queue, executor):
+async def worker(queue, executor):
     while True:
-        action, state = yield from queue.get()
+        action, state = await queue.get()
         process = executor.visit(action)
-        yield from process(action, state)
+        await process(action, state)
 
 
-@coroutine
-def pool(queue, executor, concurrency=2, *, loop):
+async def pool(queue, executor, concurrency=2, *, loop):
     pending = [loop.create_task(worker(queue, executor))
                for _ in range(concurrency)]
     try:
         # fast exit on first error
-        _, pending = yield from wait(pending, loop=loop,
-                                     return_when=FIRST_EXCEPTION)
+        _, pending = await wait(pending, loop=loop,
+                                return_when=FIRST_EXCEPTION)
     finally:
         for task in pending:
-            yield from terminate(task, loop=loop)
+            await terminate(task, loop=loop)
 
 
 def task_cmd(task, results):
@@ -240,21 +232,19 @@ def task_cmd(task, results):
     return t.render(ctx)
 
 
-@coroutine
-def _exec(client, container, cmd):
+async def _exec(client, container, cmd):
     if isinstance(cmd, str):
         cmd = ['/bin/sh', '-c', cmd]
-    exec_id = yield from client.exec_create(container, cmd)
-    output = yield from client.exec_start(exec_id)
-    info = yield from client.exec_inspect(exec_id)
+    exec_id = await client.exec_create(container, cmd)
+    output = await client.exec_start(exec_id)
+    info = await client.exec_inspect(exec_id)
     exit_code = info['ExitCode']
     if exit_code:
         print(output.decode('utf-8'))  # FIXME: proper output
     return exit_code
 
 
-@coroutine
-def build(client, layer, tasks: Tasks, *, loop):
+async def build(client, layer, tasks: Tasks, *, loop):
     if layer.parent:
         from_ = layer.parent.docker_image()
     else:
@@ -275,16 +265,16 @@ def build(client, layer, tasks: Tasks, *, loop):
     io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
     cpu_pool_task = loop.create_task(pool(cpu_queue, cpu_executor, loop=loop))
 
-    c = yield from client.create_container(
+    c = await client.create_container(
         from_.name, '/bin/sh', detach=True, tty=True,
     )
     try:
-        yield from client.start(c)
-        exit_code = yield from _exec(client, c, ['mkdir', '/.pi'])
+        await client.start(c)
+        exit_code = await _exec(client, c, ['mkdir', '/.pi'])
         if exit_code:
             return False
 
-        yield from ActionDispatcher.dispatch(states, io_queue, cpu_queue)
+        await ActionDispatcher.dispatch(states, io_queue, cpu_queue)
 
         total = len(task_items)
         padding = math.ceil(math.log10(total + 1))
@@ -293,7 +283,7 @@ def build(client, layer, tasks: Tasks, *, loop):
             task_states = {action: states[action]
                            for action in iter_actions(task)}
 
-            yield from wait_actions(task_states, loop=loop)
+            await wait_actions(task_states, loop=loop)
 
             errors = {action: state.error
                       for action, state in task_states.items()
@@ -307,33 +297,33 @@ def build(client, layer, tasks: Tasks, *, loop):
             for action, state in task_states.items():
                 if action not in submitted_states:
                     with open(state.result.file.name, 'rb') as tar:
-                        yield from client.put_archive(c, '/.pi', tar)
+                        await client.put_archive(c, '/.pi', tar)
                     submitted_states.add(action)
 
             cmd = task_cmd(task, task_results)
             current_index = '{{:{}d}}'.format(padding).format(i)
             print('[{}/{}] {}'.format(current_index, total, cmd))
-            exit_code = yield from _exec(client, c, cmd)
+            exit_code = await _exec(client, c, cmd)
             if exit_code:
                 return False
 
-        exit_code = yield from _exec(client, c, ['rm', '-rf', '/.pi'])
+        exit_code = await _exec(client, c, ['rm', '-rf', '/.pi'])
         if exit_code:
             return False
 
-        yield from client.pause(c)
-        yield from client.commit(
+        await client.pause(c)
+        await client.commit(
             c,
             layer.image.repository,
             layer.version(),
         )
-        yield from client.unpause(c)
+        await client.unpause(c)
         return True
 
     finally:
-        yield from terminate(io_pool_task, loop=loop)
-        yield from terminate(cpu_pool_task, loop=loop)
+        await terminate(io_pool_task, loop=loop)
+        await terminate(cpu_pool_task, loop=loop)
         process_pool.shutdown()
         for state in states.values():
             state.result.close()
-        yield from client.remove_container(c, v=True, force=True)
+        await client.remove_container(c, v=True, force=True)

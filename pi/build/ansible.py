@@ -2,7 +2,6 @@ import io
 import tarfile
 import subprocess
 
-from asyncio import coroutine
 from tempfile import NamedTemporaryFile
 
 from .._res import LOCAL_PYTHON_BIN, LOCAL_PYTHON_LIB
@@ -45,14 +44,13 @@ def _pi_python_tar():
     return f
 
 
-@coroutine
-def build(client, layer, ansible_tasks, *, loop):
+async def build(client, layer, ansible_tasks, *, loop):
     if layer.parent:
         from_ = layer.parent.docker_image()
     else:
         from_ = layer.image.from_
 
-    c = yield from client.create_container(
+    c = await client.create_container(
         from_.name,
         '/bin/sh',
         detach=True,
@@ -62,8 +60,8 @@ def build(client, layer, ansible_tasks, *, loop):
     c_id = c['Id']
     plays = [{'hosts': c_id, 'tasks': ansible_tasks.tasks}]
     try:
-        yield from client.start(c)
-        yield from client.put_archive(c, '/', _pi_python_tar())
+        await client.start(c)
+        await client.put_archive(c, '/', _pi_python_tar())
         with NamedTemporaryFile('w+', encoding='utf-8') as pb_file, \
                 NamedTemporaryFile('w+', encoding='ascii') as inv_file:
             pb_file.write(yaml.dump(plays))
@@ -80,25 +78,25 @@ def build(client, layer, ansible_tasks, *, loop):
                                         '-i', inv_file.name,
                                         pb_file.name])
 
-            exit_code = yield from loop.run_in_executor(None, call_ansible)
+            exit_code = await loop.run_in_executor(None, call_ansible)
             if exit_code:
                 return False
 
             # cleanup
-            rm_id = yield from client.exec_create(
+            rm_id = await client.exec_create(
                 c,
                 ['rm', '-rf', REMOTE_PYTHON_PREFIX],
             )
-            yield from client.exec_start(rm_id)
+            await client.exec_start(rm_id)
 
             # commit
-            yield from client.pause(c)
-            yield from client.commit(
+            await client.pause(c)
+            await client.commit(
                 c,
                 layer.image.repository,
                 layer.version(),
             )
-            yield from client.unpause(c)
+            await client.unpause(c)
             return True
     finally:
-        yield from client.remove_container(c, v=True, force=True)
+        await client.remove_container(c, v=True, force=True)

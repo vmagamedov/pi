@@ -4,7 +4,7 @@ import socket
 import os.path
 import logging
 
-from asyncio import Queue, CancelledError, Event, coroutine
+from asyncio import Queue, CancelledError, Event
 from asyncio import TimeoutError as AIOTimeoutError, wait_for
 
 from ._requires import click
@@ -16,8 +16,7 @@ from .client import APIError, NotFound
 log = logging.getLogger(__name__)
 
 
-@coroutine
-def stdin_reader(fd, in_queue, *, loop):
+async def stdin_reader(fd, in_queue, *, loop):
     eof = Event(loop=loop)
 
     def cb():
@@ -28,33 +27,30 @@ def stdin_reader(fd, in_queue, *, loop):
 
     loop.add_reader(fd, cb)
     try:
-        yield from eof.wait()
+        await eof.wait()
     finally:
         loop.remove_reader(fd)
 
 
-@coroutine
-def stdout_writer(out_queue):
+async def stdout_writer(out_queue):
     while True:
-        data = yield from out_queue.get()
+        data = await out_queue.get()
         sys.stdout.write(data.decode('utf-8', 'replace'))
         sys.stdout.flush()
 
 
-@coroutine
-def socket_reader(sock, out_queue, *, loop):
+async def socket_reader(sock, out_queue, *, loop):
     while True:
-        data = yield from loop.sock_recv(sock, 4096)
+        data = await loop.sock_recv(sock, 4096)
         if not data:
             break
-        yield from out_queue.put(data)
+        await out_queue.put(data)
 
 
-@coroutine
-def socket_writer(sock, in_queue, *, loop):
+async def socket_writer(sock, in_queue, *, loop):
     while True:
-        data = yield from in_queue.get()
-        yield from loop.sock_sendall(sock, data)
+        data = await in_queue.get()
+        await loop.sock_sendall(sock, data)
 
 
 class _VolumeBinds:
@@ -96,10 +92,9 @@ def _port_binds(ports):
             for e in ports}
 
 
-@coroutine
-def start(client, image, command, *, entrypoint=None,
-          volumes=None, ports=None, environ=None, work_dir=None,
-          network=None, network_alias=None, label=None):
+async def start(client, image, command, *, entrypoint=None,
+                volumes=None, ports=None, environ=None, work_dir=None,
+                network=None, network_alias=None, label=None):
     volumes = volumes or []
     container_volumes = _VolumeBinds.translate_volumes(volumes)
     container_volume_binds = _VolumeBinds.translate_binds(volumes)
@@ -122,7 +117,7 @@ def start(client, image, command, *, entrypoint=None,
             network: {'Aliases': [network_alias]},
         })
     try:
-        c = yield from client.create_container(
+        c = await client.create_container(
             image=image.name,
             command=command,
             stdin_open=True,
@@ -140,27 +135,25 @@ def start(client, image, command, *, entrypoint=None,
         click.echo(e.explanation)
         return
     try:
-        yield from client.start(c)
+        await client.start(c)
     except APIError as e:
         click.echo(e.explanation)
-        yield from client.remove_container(c, v=True, force=True)
+        await client.remove_container(c, v=True, force=True)
     else:
         return c
 
 
-@coroutine
-def resize(client, container):
+async def resize(client, container):
     width, height = click.get_terminal_size()
     try:
-        yield from client.resize(container, height, width)
+        await client.resize(container, height, width)
     except NotFound as e:
         log.debug('Failed to resize terminal: %s', e)
 
 
-@coroutine
-def attach(client, container, input_fd, *, loop, wait_exit=10):
+async def attach(client, container, input_fd, *, loop, wait_exit=10):
     params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
-    with (yield from client.attach_socket(container, params)) as sock_io:
+    with (await client.attach_socket(container, params)) as sock_io:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
                              fileno=sock_io.fileno())
         sock.setblocking(False)
@@ -179,37 +172,36 @@ def attach(client, container, input_fd, *, loop, wait_exit=10):
 
         exit_code = None
         try:
-            exit_code = yield from client.wait(container)
+            exit_code = await client.wait(container)
         except CancelledError:
-            yield from client.kill(container, signal.SIGINT)
+            await client.kill(container, signal.SIGINT)
             try:
-                yield from wait_for(socket_reader_task, wait_exit, loop=loop)
+                await wait_for(socket_reader_task, wait_exit, loop=loop)
             except AIOTimeoutError:
-                yield from client.kill(container, signal.SIGKILL)
+                await client.kill(container, signal.SIGKILL)
 
-        yield from terminate(stdout_writer_task, loop=loop)
-        yield from terminate(stdin_reader_task, loop=loop)
-        yield from terminate(socket_reader_task, loop=loop)
-        yield from terminate(socket_writer_task, loop=loop)
+        await terminate(stdout_writer_task, loop=loop)
+        await terminate(stdin_reader_task, loop=loop)
+        await terminate(socket_reader_task, loop=loop)
+        await terminate(socket_writer_task, loop=loop)
         return exit_code
 
 
-@coroutine
-def run(client, input_fd, image, command, *, loop,
-        volumes=None, ports=None, environ=None, work_dir=None, network=None,
-        network_alias=None, wait_exit=3):
-    c = yield from start(client, image, command, volumes=volumes,
-                         ports=ports, environ=environ, work_dir=work_dir,
-                         network=network, network_alias=network_alias)
+async def run(client, input_fd, image, command, *, loop,
+              volumes=None, ports=None, environ=None, work_dir=None,
+              network=None, network_alias=None, wait_exit=3):
+    c = await start(client, image, command, volumes=volumes,
+                    ports=ports, environ=environ, work_dir=work_dir,
+                    network=network, network_alias=network_alias)
     if c is None:
         return
     try:
-        yield from resize(client, c)
-        exit_code = yield from attach(client, c, input_fd, loop=loop,
-                                      wait_exit=wait_exit)
+        await resize(client, c)
+        exit_code = await attach(client, c, input_fd, loop=loop,
+                                 wait_exit=wait_exit)
         if exit_code is None:
-            exit_code = yield from client.wait(c)
+            exit_code = await client.wait(c)
         return exit_code
 
     finally:
-        yield from client.remove_container(c, v=True, force=True)
+        await client.remove_container(c, v=True, force=True)

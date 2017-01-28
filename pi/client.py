@@ -1,7 +1,6 @@
 import json
 import socket
 
-from asyncio import coroutine
 from functools import partial
 from contextlib import contextmanager
 from collections import deque
@@ -24,12 +23,11 @@ class ChunkedReader:
         self.chunks = deque()
         self.complete = False
 
-    @coroutine
-    def read(self):
+    async def read(self):
         while not self.chunks:
             if self.complete:
                 raise RuntimeError('Stream is already consumed')
-            data = yield from self.loop.sock_recv(self.sock, 4096)
+            data = await self.loop.sock_recv(self.sock, 4096)
             if not data:
                 raise IOError('Incomplete response')
             self.tail += data
@@ -57,8 +55,8 @@ class DockerStreamDecoder:
     def __init__(self, reader):
         self.reader = reader
 
-    def read(self):
-        chunk = yield from self.reader.read()
+    async def read(self):
+        chunk = await self.reader.read()
         if chunk:
             return map(json.loads, chunk.decode('utf-8').strip().split('\r\n'))
         else:
@@ -101,10 +99,9 @@ class AsyncClient:
     def create_networking_config(self, *args, **kwargs):
         return self._client.create_networking_config(*args, **kwargs)
 
-    @coroutine
-    def _exec(self, func, *args, **kwargs):
+    async def _exec(self, func, *args, **kwargs):
         wrapper = partial(func, *args, **kwargs)
-        result = yield from self._loop.run_in_executor(None, wrapper)
+        result = await self._loop.run_in_executor(None, wrapper)
         return result
 
     def images(self, *args, **kwargs):

@@ -1,6 +1,6 @@
 import logging
 
-from asyncio import Queue, coroutine
+from asyncio import Queue
 from itertools import chain
 from collections import defaultdict
 
@@ -71,35 +71,33 @@ BUILD_DONE = MessageType('BUILD_DONE')
 BUILD_FAILED = MessageType('BUILD_FAILED')
 
 
-@coroutine
-def pull_worker(client, queue, result_queue, *, loop):
+async def pull_worker(client, queue, result_queue, *, loop):
     puller = Puller(client, loop=loop)
     while True:
-        dep = yield from queue.get()
+        dep = await queue.get()
         try:
-            result = yield from puller.visit(dep.docker_image)
+            result = await puller.visit(dep.docker_image)
         except Exception:
             log.exception('Failed to pull image')
-            yield from result_queue.put((PULL_FAILED, dep))
+            await result_queue.put((PULL_FAILED, dep))
         else:
             status = PULL_DONE if result else PULL_FAILED
-            yield from result_queue.put((status, dep))
+            await result_queue.put((status, dep))
 
 
-@coroutine
-def build_worker(client, layers, queue, result_queue, *, loop):
+async def build_worker(client, layers, queue, result_queue, *, loop):
     while True:
-        dep = yield from queue.get()
+        dep = await queue.get()
         try:
             layer = layers.get(dep.image.name)
             builder = Builder(client, layer, loop=loop)
-            result = yield from builder.visit(dep.image.provision_with)
+            result = await builder.visit(dep.image.provision_with)
         except Exception:
             log.exception('Failed to build image')
-            yield from result_queue.put((BUILD_FAILED, dep))
+            await result_queue.put((BUILD_FAILED, dep))
         else:
             status = BUILD_DONE if result else BUILD_FAILED
-            yield from result_queue.put((status, dep))
+            await result_queue.put((status, dep))
 
 
 def build_deps_map(plain_deps):
@@ -138,9 +136,8 @@ def build_deps_map(plain_deps):
     return dict(deps)
 
 
-@coroutine
-def check(client, dependencies):
-    available_images = yield from client.images()
+async def check(client, dependencies):
+    available_images = await client.images()
     repo_tags = set(chain.from_iterable(i['RepoTags']
                                         for i in available_images))
     missing = [d for d in dependencies
@@ -170,11 +167,10 @@ def mark_failed(deps_map, in_work, item):
     return failed
 
 
-@coroutine
-def resolve(client, layers, services, obj, *, loop,
-            pull=False, build=False, fail_fast=False):
+async def resolve(client, layers, services, obj, *, loop,
+                  pull=False, build=False, fail_fast=False):
     deps = ImagesCollector.collect(layers, services, obj)
-    missing = yield from check(client, deps)
+    missing = await check(client, deps)
     if not missing or not (pull or build):
         return missing
 
@@ -199,16 +195,16 @@ def resolve(client, layers, services, obj, *, loop,
             init_queue = pull_queue if pull else build_queue
             for item in batch:
                 mark_working(deps_map, in_work, item)
-                yield from init_queue.put(item)
+                await init_queue.put(item)
 
-            result, image = yield from result_queue.get()
+            result, image = await result_queue.get()
 
             if result is PULL_DONE:
                 mark_done(deps_map, in_work, image)
 
             elif result is PULL_FAILED:
                 if build:
-                    yield from build_queue.put(image)
+                    await build_queue.put(image)
                 else:
                     failed.extend(mark_failed(deps_map, in_work, image))
                     if fail_fast:
@@ -223,6 +219,6 @@ def resolve(client, layers, services, obj, *, loop,
                     deps_map.clear()
 
     finally:
-        yield from terminate(puller_task, loop=loop)
-        yield from terminate(builder_task, loop=loop)
+        await terminate(puller_task, loop=loop)
+        await terminate(builder_task, loop=loop)
     return failed

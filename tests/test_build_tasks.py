@@ -1,6 +1,5 @@
 import tarfile
 
-from asyncio import coroutine
 from contextlib import closing
 from concurrent.futures import ProcessPoolExecutor
 
@@ -25,36 +24,34 @@ def test_task_cmd():
     assert task_cmd(task, results) == 'feeds {}'.format(download_path)
 
 
-def server(content, *, loop):
+async def server(content, *, loop):
     host, port = 'localhost', 6789
 
-    @coroutine
-    def handle(_):
+    async def handle(_):
         return web.Response(body=content)
 
     app = web.Application(loop=loop)
     app.router.add_get('/', handle)
     handler = app.make_handler()
 
-    srv = yield from loop.create_server(handler, host, port)
-    yield from app.startup()
+    srv = await loop.create_server(handler, host, port)
+    await app.startup()
 
-    @coroutine
-    def close():
+    async def close():
         srv.close()
-        yield from srv.wait_closed()
-        yield from app.shutdown()
-        yield from handler.finish_connections(1)
-        yield from app.cleanup()
+        await srv.wait_closed()
+        await app.shutdown()
+        await handler.finish_connections(1)
+        await app.cleanup()
 
     url = 'http://{}:{}/'.format(host, port)
     return url, close
 
 
 @pytest.mark.asyncio
-def test_download(loop):
+async def test_download(loop):
     content = b'oiVeFletchHeloiseSamosasWearer'
-    url, close = yield from server(content, loop=loop)
+    url, close = await server(content, loop=loop)
     try:
         action = Download(url)
         task = Task('whatever', where={'slaw': action})
@@ -63,17 +60,17 @@ def test_download(loop):
         with closing(state.result):
             executor = IOExecutor(loop=loop)
             process = executor.visit(action)
-            yield from process(action, state)
+            await process(action, state)
             with tarfile.open(state.result.file.name) as tmp_tar:
                 assert state.result.uuid in tmp_tar.getnames()
                 with tmp_tar.extractfile(state.result.uuid) as f:
                     assert f.read() == content
     finally:
-        yield from close()
+        await close()
 
 
 @pytest.mark.asyncio
-def test_bundle(loop):
+async def test_bundle(loop):
     action = Bundle('pi/ui')
     task = Task('whatever', where={'twihard': action})
     states = get_action_states([task], loop=loop)
@@ -82,7 +79,7 @@ def test_bundle(loop):
         with ProcessPoolExecutor() as process_pool:
             executor = CPUExecutor(process_pool, loop=loop)
             process = executor.visit(action)
-            yield from process(action, state)
+            await process(action, state)
             with tarfile.open(state.result.file.name) as tmp:
                 file_path = '{}/pi/ui/__init__.py'.format(state.result.uuid)
                 assert file_path in tmp.getnames()

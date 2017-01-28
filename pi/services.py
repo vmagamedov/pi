@@ -1,5 +1,3 @@
-from asyncio import coroutine
-
 from .utils import search_container
 from .types import Service, LocalPath, Mode
 
@@ -8,9 +6,8 @@ def service_label(namespace: str, service: Service):
     return '{}-{}'.format(namespace, service.name)
 
 
-@coroutine
-def ensure_running(client, namespace, services):
-    containers = yield from client.containers(all=True)
+async def ensure_running(client, namespace, services):
+    containers = await client.containers(all=True)
     for service in services:
         label = service_label(namespace, service)
         container = next(search_container(label, containers), None)

@@ -104,8 +104,8 @@ def _sig_handler(sig_num, task):
 
 
 def async_func(*, signals=(signal.SIGINT, signal.SIGTERM), exit_code=1):
-    def decorator(func):
-        coro_func = asyncio.coroutine(func)
+    def decorator(coro_func):
+        assert asyncio.iscoroutinefunction(coro_func), type(coro_func)
 
         def wrapper(*args, loop, **kwargs):
             task = loop.create_task(coro_func(*args, loop=loop, **kwargs))
@@ -125,9 +125,9 @@ def async_func(*, signals=(signal.SIGINT, signal.SIGTERM), exit_code=1):
     return decorator
 
 
-def terminate(task, *, loop, wait=1):
+async def terminate(task, *, loop, wait=1):
     task.cancel()
     try:
-        yield from asyncio.wait_for(task, wait, loop=loop)
+        await asyncio.wait_for(task, wait, loop=loop)
     except asyncio.CancelledError:
         pass

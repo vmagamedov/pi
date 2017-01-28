@@ -2,8 +2,6 @@ import sys
 import hashlib
 import binascii
 
-from asyncio import coroutine
-
 from .types import DockerImage, Image
 
 
@@ -109,12 +107,11 @@ def construct_layers(config):
     return list(layers.values())
 
 
-@coroutine
-def _echo_download_progress(output):
+async def _echo_download_progress(output):
     error = False
     last_id = None
     while True:
-        items = yield from output.read()
+        items = await output.read()
         if not items:
             break
         for i in items:
@@ -154,20 +151,18 @@ class Puller:
     def visit(self, obj):
         return obj.accept(self)
 
-    @coroutine
-    def visit_dockerimage(self, obj):
+    async def visit_dockerimage(self, obj):
         from .client import APIError
 
         try:
-            output = yield from self.client.pull(obj.name, stream=True,
-                                                 decode=True)
+            output = await self.client.pull(obj.name, stream=True, decode=True)
         except APIError as e:
             if e.response.status_code == 404:
                 return False
             raise
         else:
             with output as reader:
-                success = yield from _echo_download_progress(reader)
+                success = await _echo_download_progress(reader)
                 return success
 
 
@@ -180,12 +175,10 @@ class Pusher:
     def visit(self, obj):
         return obj.accept(self)
 
-    @coroutine
-    def visit_dockerimage(self, obj):
-        output = yield from self.client.push(obj.name, stream=True,
-                                             decode=True)
+    async def visit_dockerimage(self, obj):
+        output = await self.client.push(obj.name, stream=True, decode=True)
         with output as reader:
-            success = yield from _echo_download_progress(reader)
+            success = await _echo_download_progress(reader)
             return success
 
 
@@ -199,23 +192,20 @@ class Builder(object):
     def visit(self, obj):
         return obj.accept(self)
 
-    @coroutine
-    def visit_dockerfile(self, obj):
+    async def visit_dockerfile(self, obj):
         from .build.dockerfile import build
 
-        result = yield from build(self.client, self.layer, obj)
+        result = await build(self.client, self.layer, obj)
         return result
 
-    @coroutine
-    def visit_ansibletasks(self, obj):
+    async def visit_ansibletasks(self, obj):
         from .build.ansible import build
 
-        result = yield from build(self.client, self.layer, obj, loop=self.loop)
+        result = await build(self.client, self.layer, obj, loop=self.loop)
         return result
 
-    @coroutine
-    def visit_tasks(self, obj):
+    async def visit_tasks(self, obj):
         from .build.tasks import build
 
-        result = yield from build(self.client, self.layer, obj, loop=self.loop)
+        result = await build(self.client, self.layer, obj, loop=self.loop)
         return result

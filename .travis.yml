@@ -4,8 +4,8 @@ services:
 
 language: python
 python:
-  - 3.4
   - 3.5
+  - 3.6
 
 before_install:
   - sudo apt-add-repository -y ppa:ansible/ansible

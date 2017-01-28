@@ -34,8 +34,8 @@ class Context:
 def async_cmd(func):
 
     @async_func()
-    def async_wrapper(ctx, *args, loop, **kwargs):
-        yield from func(ctx, *args, **kwargs)
+    async def async_wrapper(ctx, *args, loop, **kwargs):
+        await func(ctx, *args, **kwargs)
 
     def sync_wrapper(ctx, *args, **kwargs):
         async_wrapper(ctx, *args, loop=ctx.loop, **kwargs)
