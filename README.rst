@@ -1,16 +1,12 @@
 `Pi` -- command-line tool for managing development environments.
 It is configurable using DSL with YAML_ syntax, which is
-like `Makefile` on steroids -- with nice command-line UI and containerized
+like `Makefile` on steroids -- nice command-line UI and containerized
 environments.
-
-:Build with: Dockerfile_ | Ansible_
-:Run with: `Docker`_
-:Works on: `Linux` | `macOS` | `Windows`
 
 Example
 ~~~~~~~
 
-Configuration to build this documentation, `pi.yaml`:
+Configuration to build documentation, `pi.yaml`:
 
 .. code-block:: yaml
 
@@ -20,13 +16,13 @@ Configuration to build this documentation, `pi.yaml`:
 
     - !Image
       name: docs
-      from: !DockerImage python:3.5.2-alpine
+      from: !DockerImage python:3.5-alpine
       repository: reg.local/pi/docs
-      provision-with: !AnsibleTasks
-        - pip: name={{item}} executable=pip3 extra_args='--no-cache-dir'
-          with_items:
-            - sphinx==1.4.8
-            - sphinx_rtd_theme==0.1.10a0
+      tasks:
+      - run: pip3 install {{packages|join(" ")}}
+        packages:
+        - sphinx
+        - sphinx_rtd_theme
 
     - !ShellCommand
       name: build docs
@@ -64,19 +60,12 @@ Command in action:
 Installation
 ~~~~~~~~~~~~
 
-`Pi` requires `Python` 3.4 or higher. To build images with `Ansible`_,
-you will obviously need to install `Ansible`_ too (but this is optional
-feature).
-
-You can install `Pi` directly into your system packages, it has zero
-dependencies, so it can be uninstalled without leaving any traces in your
-system:
+`Pi` requires `Python` 3.5 or higher. You can install `Pi` directly into your
+system packages, it has zero dependencies, so it can be uninstalled without
+leaving any traces in your system:
 
 .. code-block:: shell
 
     $ pip3 install {COMING SOON}
 
 .. _YAML: http://yaml.org/spec/
-.. _Docker: https://github.com/docker/docker
-.. _Dockerfile: https://docs.docker.com/engine/reference/builder/
-.. _Ansible: https://github.com/ansible/ansible

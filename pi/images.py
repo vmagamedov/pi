@@ -5,24 +5,6 @@ import binascii
 from .types import DockerImage, Image
 
 
-class _HashableChunks:
-
-    def visit(self, obj):
-        return obj.accept(self)
-
-    def visit_dockerfile(self, obj):
-        with open(obj.file_name, 'rb') as f:
-            yield f.read()
-
-    def visit_ansibletasks(self, obj):
-        yield repr(obj.tasks).encode('utf-8')
-
-    def visit_tasks(self, obj):
-        for task in obj.items:
-            yield task['run'].encode('utf-8')
-            yield repr(task.get('where')).encode('utf-8')
-
-
 class Layer:
     _hash = None
 
@@ -39,9 +21,8 @@ class Layer:
             h = hashlib.sha1()
             if self.parent is not None:
                 h.update(self.parent.hash())
-            chunks = _HashableChunks().visit(self.image.provision_with)
-            for chunk in chunks:
-                h.update(chunk)
+            for task in self.image.tasks:
+                h.update(repr(task).encode('utf-8'))
             self._hash = h.digest()
         return self._hash
 
@@ -142,70 +123,30 @@ async def _echo_download_progress(output):
     return not error
 
 
-class Puller:
+async def pull(client, docker_image):
+    from .client import APIError
 
-    def __init__(self, client, *, loop):
-        self.client = client
-        self.loop = loop
-
-    def visit(self, obj):
-        return obj.accept(self)
-
-    async def visit_dockerimage(self, obj):
-        from .client import APIError
-
-        try:
-            output = await self.client.pull(obj.name, stream=True, decode=True)
-        except APIError as e:
-            if e.response.status_code == 404:
-                return False
-            raise
-        else:
-            with output as reader:
-                success = await _echo_download_progress(reader)
-                return success
-
-
-class Pusher:
-
-    def __init__(self, client, *, loop):
-        self.client = client
-        self.loop = loop
-
-    def visit(self, obj):
-        return obj.accept(self)
-
-    async def visit_dockerimage(self, obj):
-        output = await self.client.push(obj.name, stream=True, decode=True)
+    try:
+        output = await client.pull(docker_image.name, stream=True, decode=True)
+    except APIError as e:
+        if e.response.status_code == 404:
+            return False
+        raise
+    else:
         with output as reader:
             success = await _echo_download_progress(reader)
             return success
 
 
-class Builder(object):
+async def push(client, docker_image):
+    output = await client.push(docker_image.name, stream=True, decode=True)
+    with output as reader:
+        success = await _echo_download_progress(reader)
+        return success
 
-    def __init__(self, client, layer, *, loop):
-        self.client = client
-        self.layer = layer
-        self.loop = loop
 
-    def visit(self, obj):
-        return obj.accept(self)
+async def build(client, layer, tasks, *, loop):
+    from .tasks import build as build_tasks
 
-    async def visit_dockerfile(self, obj):
-        from .build.dockerfile import build
-
-        result = await build(self.client, self.layer, obj)
-        return result
-
-    async def visit_ansibletasks(self, obj):
-        from .build.ansible import build
-
-        result = await build(self.client, self.layer, obj, loop=self.loop)
-        return result
-
-    async def visit_tasks(self, obj):
-        from .build.tasks import build
-
-        result = await build(self.client, self.layer, obj, loop=self.loop)
-        return result
+    result = await build_tasks(client, layer, tasks, loop=loop)
+    return result

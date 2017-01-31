@@ -7,9 +7,9 @@ import pytest
 
 from aiohttp import web
 
-from pi.types import Download, Bundle
-from pi.build.tasks import task_cmd, Task, get_action_states
-from pi.build.tasks import IOExecutor, CPUExecutor
+from pi.types import Download, Bundle, Task
+from pi.tasks import IOExecutor, CPUExecutor
+from pi.tasks import task_cmd, get_action_states
 
 
 def test_task_cmd():

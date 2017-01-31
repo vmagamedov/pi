@@ -11,19 +11,12 @@ from asyncio import wait, Queue, Event, gather, FIRST_EXCEPTION
 
 from concurrent.futures import ProcessPoolExecutor
 
-from .._requires import attr
-from .._requires import jinja2
-from .._requires import requests
+from ._requires import attr
+from ._requires import jinja2
+from ._requires import requests
 
-from ..types import Tasks, ActionType
-from ..utils import terminate
-
-
-@attr.s
-class Task:
-    run = attr.ib()
-    name = attr.ib(default=None)
-    where = attr.ib(default=attr.Factory(dict))
+from .types import ActionType
+from .utils import terminate
 
 
 class ResultBase:
@@ -244,13 +237,11 @@ async def _exec(client, container, cmd):
     return exit_code
 
 
-async def build(client, layer, tasks: Tasks, *, loop):
+async def build(client, layer, tasks, *, loop):
     if layer.parent:
         from_ = layer.parent.docker_image()
     else:
         from_ = layer.image.from_
-
-    task_items = [Task(**d) for d in tasks.items]
 
     io_queue = Queue()
     io_executor = IOExecutor(loop=loop)
@@ -259,7 +250,7 @@ async def build(client, layer, tasks: Tasks, *, loop):
     cpu_queue = Queue()
     cpu_executor = CPUExecutor(process_pool, loop=loop)
 
-    states = get_action_states(task_items, loop=loop)
+    states = get_action_states(tasks, loop=loop)
     submitted_states = set()
 
     io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
@@ -276,10 +267,10 @@ async def build(client, layer, tasks: Tasks, *, loop):
 
         await ActionDispatcher.dispatch(states, io_queue, cpu_queue)
 
-        total = len(task_items)
+        total = len(tasks)
         padding = math.ceil(math.log10(total + 1))
 
-        for i, task in enumerate(task_items, 1):
+        for i, task in enumerate(tasks, 1):
             task_states = {action: states[action]
                            for action in iter_actions(task)}
 

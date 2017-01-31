@@ -95,44 +95,34 @@ class DockerImage(ScalarConstruct):
         return visitor.visit_dockerimage(self)
 
 
-class ProvisionType:
-
-    def accept(self, visitor):
-        raise NotImplementedError
-
-
 @attr.s
-class Dockerfile(ProvisionType, ScalarConstruct):
-    __tag__ = '!Dockerfile'
+class Task:
+    run = attr.ib()
+    where = attr.ib(default=attr.Factory(dict))
 
-    file_name = attr.ib(default='Dockerfile')  # type: str
+    @classmethod
+    def from_config(cls, d):
+        run = d['run']
+        where = {k: v for k, v in d.items() if k != 'run'}
+        return cls(run, where)
 
-    def accept(self, visitor):
-        return visitor.visit_dockerfile(self)
 
-
-@attr.s
-class AnsibleTasks(ProvisionType, SequenceConstruct):
-    __tag__ = '!AnsibleTasks'
-
-    tasks = attr.ib(hash=False)  # type: list
-
-    def accept(self, visitor):
-        return visitor.visit_ansibletasks(self)
+def _convert_tasks(tasks):
+    return [Task.from_config(d) for d in tasks]
 
 
 @attr.s
 class Image(MappingConstruct):
     __tag__ = '!Image'
     __rename_to__ = ImmutableDict([
-        ('provision-with', 'provision_with'),
         ('from', 'from_'),
     ])
 
     name = attr.ib()  # type: str
     repository = attr.ib()  # type: str
-    provision_with = attr.ib()  # type: ProvisionType
-    from_ = attr.ib(default=None)  # type: Optional[Union[str, Dockerfile]]
+    from_ = attr.ib(default=None)  # type: Optional[Union[str, DockerImage]]
+    # type: Sequence[Task]
+    tasks = attr.ib(default=tuple(), hash=False, convert=_convert_tasks)
 
     def accept(self, visitor):
         return visitor.visit_image(self)
@@ -287,16 +277,6 @@ class SubCommand(CommandType, MappingConstruct):
 
     def accept(self, visitor):
         return visitor.visit_subcommand(self)
-
-
-@attr.s
-class Tasks(ProvisionType, SequenceConstruct):
-    __tag__ = '!Tasks'
-
-    items = attr.ib(hash=False)  # type: list
-
-    def accept(self, visitor):
-        return visitor.visit_tasks(self)
 
 
 class ActionType:

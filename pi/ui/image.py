@@ -8,7 +8,7 @@ from collections import Counter, namedtuple
 from ..run import run
 from ..types import DockerImage, Mode, LocalPath
 from ..utils import format_size
-from ..images import Puller, Pusher
+from ..images import pull as pull_image, push as push_image
 from ..console import pretty, config_tty
 from ..context import async_cmd
 from ..resolve import resolve
@@ -83,7 +83,7 @@ def _get_image(layers, name):
 @async_cmd
 async def image_pull(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = await Puller(ctx.client, loop=ctx.loop).visit(image)
+    success = await pull_image(ctx.client, image)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
@@ -95,7 +95,7 @@ async def image_pull(ctx, name):
 @async_cmd
 async def image_push(ctx, name):
     image = _get_image(ctx.layers, name)
-    success = await Pusher(ctx.client, loop=ctx.loop).visit(image)
+    success = await push_image(ctx.client, image)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)

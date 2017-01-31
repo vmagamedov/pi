@@ -3,102 +3,42 @@
     Project command-line interface
 
 - !Image
-  name: test
-  from: !DockerImage alpine:3.5
-  repository: reg.local/pi/test
-  provision-with: !Tasks
-  - run: apk add --no-cache python3
-  - run: pip3 install --no-cache-dir --disable-pip-version-check {{packages|join(" ")}}
-    where:
-      packages:
-      - aiohttp==1.0.5
-      - pytest==3.0.5
-      - pytest-asyncio==0.5.0
-      - flake8==3.2.1
+  name: test-py35
+  from: !DockerImage python:3.5.3-alpine
+  repository: reg.local/pi/test-py35
+  tasks:
+  - run: >
+      pip3 install --no-cache-dir --disable-pip-version-check
+      {{packages|join(" ")}}
+    packages:
+    - aiohttp==1.0.5
+    - pytest==3.0.5
+    - pytest-asyncio==0.5.0
+    - flake8==3.2.1
 
 - !Image
   name: docs
-  from: !DockerImage python:3.5.2-alpine
+  from: !DockerImage python:3.5.3-alpine
   repository: reg.local/pi/docs
-  provision-with: !AnsibleTasks
-    - pip: name={{item}} executable=pip3 extra_args='--no-cache-dir'
-      with_items:
-        - sphinx==1.4.8
-        - sphinx_rtd_theme==0.1.10a0
-
-- !Image
-  name: tasks-test
-  from: !DockerImage python:3.5.2-alpine
-  repository: reg.local/pi/tasks-test
-  provision-with: !Tasks
-  - run: pip3 install --no-deps {{packages|join(" ")}}
-    where:
-      packages:
-        - requests==3.2
-        - sqlalchemy==1.1
-  - run: sleep 1
-  - run: python3 {{get_pip_py}}
-    where:
-      get_pip_py: !Download "https://bootstrap.pypa.io/get-pip.py"
+  tasks:
+  - run: >
+      pip3 install --no-cache-dir --disable-pip-version-check
+      {{packages|join(" ")}}
+    packages:
+    - sphinx==1.4.8
+    - sphinx_rtd_theme==0.1.10a0
 
 - !SubCommand
   name: test
-  image: test
+  image: test-py35
   exec: py.test
 
 - !SubCommand
   name: lint
-  image: test
+  image: test-py35
   exec: flake8
 
 - !ShellCommand
   name: build docs
   image: docs
   eval: sphinx-build -b html docs build
-
-- !ShellCommand
-  name: app echo
-  description: Echo greeting
-  image: app.env.ansible
-  environ:
-    VAR: World
-  params:
-    - !Argument {name: name, default: $VAR}
-  eval: echo "Hello {{name}}!!!"
-
-- !SubCommand
-  name: ping
-  image: !DockerImage ubuntu:xenial
-  exec: ping
-
-- !SubCommand
-  name: shell
-  image: !DockerImage ubuntu:xenial
-  exec: /bin/bash
-  raw-input: true
-  ports:
-    - !Expose { port: 8000, as: 8080 }
-
-- !Service
-  name: redis
-  image: !DockerImage redis:latest
-  ports:
-    - !Expose { port: 6379, as: 6379 }
-
-- !Image
-  name: env
-  repository: reg.local/env
-  provision-with: !Dockerfile Dockerfile.env
-
-- !Image
-  name: app.env.ansible
-  from: env
-  repository: reg.local/app.env.ansible
-  provision-with: !AnsibleTasks
-    - file: path=/app.env.ansible.txt state=touch
-
-- !Image
-  name: app.env.dockerfile
-  from: env
-  repository: reg.local/app.env.dockerfile
-  provision-with: !Dockerfile Dockerfile.app.env

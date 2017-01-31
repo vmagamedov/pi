@@ -13,7 +13,7 @@ from . import types
 class Loader(yaml_loader.SafeLoader):
 
     def construct_mapping(self, node, deep=False):
-        items = list(super().construct_mapping(node, deep=False).items())
+        items = list(super().construct_mapping(node, deep=deep).items())
         items.sort(key=itemgetter(0))
         return OrderedDict(items)
 
@@ -38,9 +38,7 @@ Loader.add_constructor(BaseResolver.DEFAULT_MAPPING_TAG,
 
 Loader.register(types.Meta)
 Loader.register(types.Image)
-Loader.register(types.Dockerfile)
 Loader.register(types.DockerImage)
-Loader.register(types.AnsibleTasks)
 Loader.register(types.Argument)
 Loader.register(types.Option)
 Loader.register(types.ShellCommand)
@@ -50,7 +48,6 @@ Loader.register(types.LocalPath)
 Loader.register(types.NamedVolume)
 Loader.register(types.Expose)
 Loader.register_enum(types.Mode)
-Loader.register(types.Tasks)
 Loader.register(types.Download)
 Loader.register(types.Bundle)
 

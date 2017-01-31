@@ -7,8 +7,9 @@ from collections import defaultdict
 from ._requires import attr
 
 from .utils import MessageType, terminate
-from .types import DockerImage, Dockerfile
-from .images import Puller, Builder
+from .types import DockerImage
+from .images import pull as pull_image
+from .images import build as build_image
 
 
 log = logging.getLogger(__name__)
@@ -71,12 +72,11 @@ BUILD_DONE = MessageType('BUILD_DONE')
 BUILD_FAILED = MessageType('BUILD_FAILED')
 
 
-async def pull_worker(client, queue, result_queue, *, loop):
-    puller = Puller(client, loop=loop)
+async def pull_worker(client, queue, result_queue):
     while True:
         dep = await queue.get()
         try:
-            result = await puller.visit(dep.docker_image)
+            result = await pull_image(client, dep.docker_image)
         except Exception:
             log.exception('Failed to pull image')
             await result_queue.put((PULL_FAILED, dep))
@@ -90,8 +90,8 @@ async def build_worker(client, layers, queue, result_queue, *, loop):
         dep = await queue.get()
         try:
             layer = layers.get(dep.image.name)
-            builder = Builder(client, layer, loop=loop)
-            result = await builder.visit(dep.image.provision_with)
+            result = await build_image(client, layer, dep.image.tasks,
+                                       loop=loop)
         except Exception:
             log.exception('Failed to build image')
             await result_queue.put((BUILD_FAILED, dep))
@@ -120,9 +120,6 @@ def build_deps_map(plain_deps):
                     parent = from_dep
                 else:
                     parent = None  # image already exists
-            elif (dep.image.from_ is None and
-                  isinstance(dep.image.provision_with, Dockerfile)):
-                parent = None
             else:
                 raise TypeError(repr(dep.image.from_))
         else:
@@ -184,10 +181,12 @@ async def resolve(client, layers, services, obj, *, loop,
     build_queue = Queue()
     result_queue = Queue()
 
-    puller_task = loop.create_task(pull_worker(client, pull_queue, result_queue,
-                                               loop=loop))
-    builder_task = loop.create_task(build_worker(client, layers, build_queue,
-                                                 result_queue, loop=loop))
+    puller_task = loop.create_task(
+        pull_worker(client, pull_queue, result_queue)
+    )
+    builder_task = loop.create_task(
+        build_worker(client, layers, build_queue, result_queue, loop=loop)
+    )
     try:
         while deps_map or in_work:
             # enqueue all tasks with resolved dependencies

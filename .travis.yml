@@ -8,24 +8,16 @@ python:
   - 3.6
 
 before_install:
-  - sudo apt-add-repository -y ppa:ansible/ansible
   - sudo apt-get update -q
-  - sudo apt-get install -y ansible
   - sudo apt-get install -o Dpkg::Options::="--force-confnew" -y docker-engine
 
 install:
-  - pip install cram
   - pip install -e .
 
 script:
   - make all
   - pi test
   - pi lint
-  - cram tests
-
-cache:
-  directories:
-    - pi/_res/python
 
 before_deploy:
   - python setup.py sdist

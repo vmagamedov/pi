@@ -14,9 +14,4 @@ pi/_res/dumb-init:
 	wget -O ./pi/_res/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.1.1/dumb-init_1.1.1_amd64
 	chmod +x ./pi/_res/dumb-init
 
-pi/_res/python/python2.7:
-	rm -rf ./pi/_res/python || true
-	mkdir ./pi/_res/python
-	docker run -it --rm -v $(PWD)/scripts:/in:ro -v $(PWD)/pi/_res/python:/out alpine:3.4 sh /in/build.sh
-
-all: requires pi/_res/dumb-init pi/_res/python/python2.7
+all: requires pi/_res/dumb-init
