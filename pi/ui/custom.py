@@ -138,7 +138,7 @@ class _CommandCreator:
                                      DUMB_INIT_REMOTE_PATH))
 
             cmd = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
-                   render_template(command.eval, kw)]
+                   render_template(command.run, kw)]
 
             with config_tty(command.raw_input) as fd:
                 exit_code = await run(
@@ -161,7 +161,7 @@ class _CommandCreator:
                              short_help=short_help)
 
     def visit_subcommand(self, command):
-        exec_ = sh_to_list(command.exec)
+        exec_ = sh_to_list(command.run)
 
         @click.pass_obj
         @async_cmd

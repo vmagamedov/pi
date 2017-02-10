@@ -31,14 +31,14 @@
 - !SubCommand
   name: test
   image: test-py35
-  exec: py.test
+  run: py.test
 
 - !SubCommand
   name: lint
   image: test-py35
-  exec: flake8
+  run: flake8
 
 - !ShellCommand
   name: build docs
   image: docs
-  eval: sphinx-build -b html docs build
+  run: sphinx-build -b html docs build

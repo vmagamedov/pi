@@ -242,7 +242,7 @@ class ShellCommand(CommandType, MappingConstruct):
 
     name = attr.ib()  # type: str
     image = attr.ib()  # type: Union[str, DockerImage]
-    eval = attr.ib()  # type: str
+    run = attr.ib()  # type: str
     params = attr.ib(default=None)  # type: Optional[Sequence[ParameterType]]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
@@ -266,7 +266,7 @@ class SubCommand(CommandType, MappingConstruct):
 
     name = attr.ib()  # type: str
     image = attr.ib()  # type: Union[str, DockerImage]
-    exec = attr.ib()  # type: Union[str, Sequence[str]]
+    run = attr.ib()  # type: Union[str, Sequence[str]]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]

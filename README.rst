@@ -27,7 +27,7 @@ Configuration to build documentation, `pi.yaml`:
     - !ShellCommand
       name: build docs
       image: docs
-      eval: sphinx-build -b html docs build
+      run: sphinx-build -b html docs build
 
 Inspect projects without leaving your shell:
 
