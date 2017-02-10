@@ -28,17 +28,17 @@
     - sphinx==1.4.8
     - sphinx_rtd_theme==0.1.10a0
 
-- !SubCommand
+- !Command
   name: test
   image: test-py35
   run: py.test
 
-- !SubCommand
+- !Command
   name: lint
   image: test-py35
-  run: flake8
+  run: flake8 && echo OK
 
-- !ShellCommand
+- !Command
   name: build docs
   image: docs
   run: sphinx-build -b html docs build

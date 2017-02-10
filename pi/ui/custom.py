@@ -1,5 +1,7 @@
 import sys
 
+from functools import partial
+
 from .._requires import click
 from .._requires import jinja2
 
@@ -7,7 +9,6 @@ from .._res import DUMB_INIT_LOCAL_PATH
 
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
-from ..utils import sh_to_list
 from ..images import get_docker_image
 from ..context import async_cmd
 from ..console import config_tty
@@ -26,7 +27,7 @@ class ProxyCommand(click.Command):
 
     def invoke(self, ctx):
         if self.callback is not None:
-            ctx.invoke(self.callback, ctx.args)
+            ctx.invoke(self.callback, args=ctx.args)
 
 
 def create_groups(groups_parts):
@@ -49,61 +50,36 @@ def create_groups(groups_parts):
     return groups, mapping
 
 
-TYPES_MAP = {
-    'str': click.STRING,
-    'int': click.INT,
-    'bool': click.BOOL,
-}
-
-
-def get_short_help(description):
+def _get_short_help(description):
     lines = description.splitlines()
     return lines[0]
 
 
-def render_template(template, params):
+def _render_template(template, params):
     t = jinja2.Template(template)
     return t.render(params)
 
 
 class _ParameterCreator:
+    TYPES_MAP = {
+        'str': click.STRING,
+        'int': click.INT,
+        'bool': click.BOOL,
+    }
 
     def visit(self, param):
         return param.accept(self)
 
     def visit_argument(self, param):
-        cli_type = TYPES_MAP[param.type or 'str']
+        cli_type = self.TYPES_MAP[param.type or 'str']
         return click.Argument([param.name], type=cli_type,
                               default=param.default)
 
     def visit_option(self, param):
         opt_decl = ('-' if len(param.name) == 1 else '--') + param.name
-        cli_type = TYPES_MAP[param.type or 'str']
+        cli_type = self.TYPES_MAP[param.type or 'str']
         return click.Option([opt_decl], type=cli_type,
                             default=param.default)
-
-
-def get_volumes(volumes):
-    if volumes is not None:
-        return volumes
-    else:
-        return [LocalPath('.', '.', Mode.RW)]
-
-
-def get_work_dir(volumes):
-    return '.' if volumes is None else '/'
-
-
-async def _resolve(ctx, command, *, loop):
-    await resolve(
-        ctx.client,
-        ctx.layers,
-        ctx.services,
-        command,
-        loop=loop,
-        pull=True,
-        build=True,
-    )
 
 
 async def _start_services(ctx, command):
@@ -112,84 +88,69 @@ async def _start_services(ctx, command):
     await ensure_running(ctx.client, ctx.namespace, services)
 
 
-class _CommandCreator:
+async def _callback(command, ctx, **params):
+    await resolve(
+        ctx.client,
+        ctx.layers,
+        ctx.services,
+        command,
+        loop=ctx.loop,
+        pull=True,
+        build=True,
+    )
+    await _start_services(ctx, command)
+    await ensure_network(ctx.client, ctx.network)
 
-    def __init__(self, name):
-        self.name = name
+    docker_image = get_docker_image(ctx.layers, command.image)
+    volumes = [LocalPath('.', '.', Mode.RW)]
 
-    def visit(self, command):
-        return command.accept(self)
+    if isinstance(command.run, str):
+        command_run = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
+                       _render_template(command.run, params)]
+        volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
+                                 DUMB_INIT_REMOTE_PATH))
 
-    def visit_shellcommand(self, command):
+    else:
+        assert isinstance(command.run, list), type(command.run)
+        assert not command.params
+        command_run = command.run + params['args']
+
+    volumes.extend(command.volumes or [])
+
+    with config_tty(command.raw_input) as fd:
+        exit_code = await run(
+            ctx.client, fd, docker_image, command_run,
+            loop=ctx.loop,
+            volumes=volumes,
+            ports=command.ports,
+            environ=command.environ,
+            work_dir='.',
+            network=ctx.network,
+            network_alias=command.network_name,
+        )
+        sys.exit(exit_code)
+
+
+def create_command(name, command):
+    short_help = None
+    if command.description is not None:
+        short_help = _get_short_help(command.description)
+
+    callback = partial(_callback, command)
+    callback = async_cmd(callback)
+    callback = click.pass_obj(callback)
+
+    if isinstance(command.run, str):
         params_creator = _ParameterCreator()
         params = [params_creator.visit(param)
                   for param in (command.params or [])]
-
-        @click.pass_obj
-        @async_cmd
-        async def cb(ctx, **kw):
-            await _resolve(ctx, command, loop=ctx.loop)
-            docker_image = get_docker_image(ctx.layers, command.image)
-            await _start_services(ctx, command)
-            await ensure_network(ctx.client, ctx.network)
-
-            volumes = get_volumes(command.volumes)
-            volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
-                                     DUMB_INIT_REMOTE_PATH))
-
-            cmd = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
-                   render_template(command.run, kw)]
-
-            with config_tty(command.raw_input) as fd:
-                exit_code = await run(
-                    ctx.client, fd, docker_image, cmd,
-                    loop=ctx.loop,
-                    volumes=volumes,
-                    ports=command.ports,
-                    environ=command.environ,
-                    work_dir=get_work_dir(command.volumes),
-                    network=ctx.network,
-                    network_alias=command.network_name,
-                )
-                sys.exit(exit_code)
-
-        short_help = None
-        if command.description is not None:
-            short_help = get_short_help(command.description)
-        return click.Command(self.name, params=params, callback=cb,
+        return click.Command(name, params=params, callback=callback,
                              help=command.description,
                              short_help=short_help)
-
-    def visit_subcommand(self, command):
-        exec_ = sh_to_list(command.run)
-
-        @click.pass_obj
-        @async_cmd
-        async def cb(ctx, args):
-            await _resolve(ctx, command, loop=ctx.loop)
-            docker_image = get_docker_image(ctx.layers, command.image)
-            await _start_services(ctx, command)
-            await ensure_network(ctx.client, ctx.network)
-
-            cmd = exec_ + args
-            with config_tty(command.raw_input) as fd:
-                exit_code = await run(
-                    ctx.client, fd, docker_image, cmd,
-                    loop=ctx.loop,
-                    volumes=get_volumes(command.volumes),
-                    ports=command.ports,
-                    environ=command.environ,
-                    work_dir=get_work_dir(command.volumes),
-                    network=ctx.network,
-                    network_alias=command.network_name,
-                )
-                sys.exit(exit_code)
-
-        short_help = None
-        if command.description is not None:
-            short_help = get_short_help(command.description)
-        return ProxyCommand(self.name, callback=cb,
-                            help=command.description, short_help=short_help)
+    else:
+        return ProxyCommand(name, callback=callback,
+                            help=command.description,
+                            short_help=short_help)
 
 
 def create_commands_cli(config):
@@ -211,7 +172,7 @@ def create_commands_cli(config):
     cli_commands = []
     for command_path, command in commands_map.items():
         group_parts, command_name = command_path[:-1], command_path[-1]
-        cli_command = _CommandCreator(command_name).visit(command)
+        cli_command = create_command(command_name, command)
         if group_parts in mapping:
             mapping[group_parts].add_command(cli_command)
         else:

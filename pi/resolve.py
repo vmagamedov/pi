@@ -55,12 +55,7 @@ class ImagesCollector:
     def visit_service(self, obj):
         self.add(obj.image)
 
-    def visit_shellcommand(self, obj):
-        self.add(obj.image)
-        for service_name in (obj.requires or []):
-            self.visit(self._services.get(service_name))
-
-    def visit_subcommand(self, obj):
+    def visit_command(self, obj):
         self.add(obj.image)
         for service_name in (obj.requires or []):
             self.visit(self._services.get(service_name))

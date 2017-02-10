@@ -233,8 +233,8 @@ class CommandType:
 
 
 @attr.s
-class ShellCommand(CommandType, MappingConstruct):
-    __tag__ = '!ShellCommand'
+class Command(CommandType, MappingConstruct):
+    __tag__ = '!Command'
     __rename_to__ = ImmutableDict([
         ('raw-input', 'raw_input'),
         ('network-name', 'network_name'),
@@ -242,7 +242,7 @@ class ShellCommand(CommandType, MappingConstruct):
 
     name = attr.ib()  # type: str
     image = attr.ib()  # type: Union[str, DockerImage]
-    run = attr.ib()  # type: str
+    run = attr.ib()  # type: Union[str, Sequence[str]]
     params = attr.ib(default=None)  # type: Optional[Sequence[ParameterType]]
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
@@ -253,30 +253,7 @@ class ShellCommand(CommandType, MappingConstruct):
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
-        return visitor.visit_shellcommand(self)
-
-
-@attr.s
-class SubCommand(CommandType, MappingConstruct):
-    __tag__ = '!SubCommand'
-    __rename_to__ = ImmutableDict([
-        ('raw-input', 'raw_input'),
-        ('network-name', 'network_name'),
-    ])
-
-    name = attr.ib()  # type: str
-    image = attr.ib()  # type: Union[str, DockerImage]
-    run = attr.ib()  # type: Union[str, Sequence[str]]
-    volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
-    ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
-    environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
-    raw_input = attr.ib(default=None)  # type: Optional[bool]
-    requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
-    network_name = attr.ib(default=None)  # type: Optional[str]
-    description = attr.ib(default=None)  # type: Optional[str]
-
-    def accept(self, visitor):
-        return visitor.visit_subcommand(self)
+        return visitor.visit_command(self)
 
 
 class ActionType:

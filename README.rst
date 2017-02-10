@@ -24,7 +24,7 @@ Configuration to build documentation, `pi.yaml`:
         - sphinx
         - sphinx_rtd_theme
 
-    - !ShellCommand
+    - !Command
       name: build docs
       image: docs
       run: sphinx-build -b html docs build
