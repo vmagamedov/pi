@@ -13,9 +13,27 @@ from ..console import pretty
 from ..services import get_volumes, service_label
 
 
+class SingleMultiCommand(click.Command):
+
+    def __init__(self, *args, ext_help=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ext_help = ext_help
+
+    def parse_args(self, ctx, args):
+        if not args:
+            click.echo(ctx.get_help(), color=ctx.color)
+            ctx.exit()
+        return super().parse_args(ctx, args)
+
+    def format_help_text(self, ctx, formatter):
+        super().format_help_text(ctx, formatter)
+        if self.ext_help is not None:
+            self.ext_help(ctx, formatter)
+
+
 @click.pass_obj
 @async_cmd
-async def _start_callback(ctx, name):
+async def _service_start(ctx, name):
     service = ctx.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
@@ -51,7 +69,7 @@ async def _start_callback(ctx, name):
 
 @click.pass_obj
 @async_cmd
-async def _stop_callback(ctx, name):
+async def _service_stop(ctx, name):
     service = ctx.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
@@ -71,9 +89,8 @@ async def _stop_callback(ctx, name):
     click.echo('Service stopped')
 
 
-@click.pass_obj
 @async_cmd
-async def _status_callback(ctx):
+async def _service_status(ctx):
     containers = await ctx.client.containers(all=True)
 
     running = set()
@@ -113,20 +130,48 @@ async def _status_callback(ctx):
                                        'Docker image']))
 
 
+def _service_ext_help(ctx, formatter):
+    if ctx.obj.services:
+        with formatter.section('Services'):
+            formatter.write_dl([(service.name, service.description or '')
+                                for service in ctx.obj.services])
+    else:
+        with formatter.section('Services'):
+            formatter.write_text('--- not defined ---')
+    with formatter.section('Actions'):
+        formatter.write_text('start')
+        formatter.write_text('stop')
+
+
+def _service_status_callback(ctx, param, value):
+    if value and not ctx.resilient_parsing:
+        _service_status(ctx.obj)
+        ctx.exit()
+
+
+@click.pass_context
+def _service_callback(ctx, name, action):
+    if action == 'start':
+        _service_start(name)
+    elif action == 'stop':
+        _service_stop(name)
+    else:
+        click.echo('Invalid action: {}'.format(action))
+        ctx.exit(1)
+
+
 def create_service_cli():
-    service_group = click.Group('service')
-    service_group.add_command(
-        click.Command('start', params=[click.Argument(['name'])],
-                      callback=_start_callback, help='Start service')
-    )
-    service_group.add_command(
-        click.Command('stop', params=[click.Argument(['name'])],
-                      callback=_stop_callback, help='Stop service')
-    )
-    service_group.add_command(
-        click.Command('status', callback=_status_callback,
-                      help='Services status')
-    )
+    params = [
+        click.Option(['-s', '--status'], is_flag=True, is_eager=True,
+                     expose_value=False, callback=_service_status_callback,
+                     help='Display services status'),
+        click.Argument(['name']),
+        click.Argument(['action']),
+    ]
+    help_ = 'Services status and management'
+    service_command = SingleMultiCommand('service', params=params,
+                                         callback=_service_callback,
+                                         help=help_, ext_help=_service_ext_help)
     cli = click.Group()
-    cli.add_command(service_group)
+    cli.add_command(service_command)
     return cli

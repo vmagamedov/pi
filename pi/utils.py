@@ -88,6 +88,9 @@ class SequenceMap:
     def __iter__(self):
         return iter(self._items)
 
+    def __len__(self):
+        return len(self._items)
+
 
 def sh_to_list(args):
     if isinstance(args, str):
