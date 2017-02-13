@@ -1,7 +1,6 @@
 import sys
 
 from operator import attrgetter
-from functools import partial
 from collections import defaultdict
 from collections import Counter, namedtuple
 
@@ -15,11 +14,17 @@ from ..resolve import resolve
 
 from .._requires import click
 
+from .custom import ProxyCommand
+
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 
 
-async def _build_image(ctx, *, name):
+@click.command('build', help='Build image')
+@click.pass_obj
+@async_cmd
+async def image_build(ctx):
+    name = click.get_current_context().meta['image_name']
     image = ctx.layers.get(name).image
     failed = await resolve(
         ctx.client,
@@ -35,39 +40,6 @@ async def _build_image(ctx, *, name):
         sys.exit(1)
 
 
-@click.command('list', help='List known images')
-@click.pass_obj
-@async_cmd
-async def image_list(ctx):
-    from .._requires.tabulate import tabulate
-
-    available = set()
-    counts = Counter()
-    sizes = {}
-    images = await ctx.client.images()
-    for image in images:
-        available.update(image['RepoTags'])
-        for repo_tag in image['RepoTags']:
-            repo, _ = repo_tag.split(':')
-            counts[repo] += 1
-            sizes[repo_tag] = image['VirtualSize']
-
-    rows = []
-    for layer in sorted(ctx.layers, key=attrgetter('name')):
-        image_name = layer.docker_image().name
-        if image_name in available:
-            pretty_name = pretty('\u2714 {_green}{}{_r}', layer.name)
-        else:
-            pretty_name = pretty('\u2717 {_red}{}{_r}', layer.name)
-        size = sizes.get(image_name, 0)
-        pretty_size = format_size(size) if size else None
-        count = counts.get(layer.image.repository, None)
-        rows.append([pretty_name, image_name, pretty_size, count])
-
-    click.echo(tabulate(rows, headers=['  Image name', 'Docker image',
-                                       'Size', 'Versions']))
-
-
 def _get_image(layers, name):
     try:
         layer = layers.get(name)
@@ -78,10 +50,10 @@ def _get_image(layers, name):
 
 
 @click.command('pull', help='Pull image version')
-@click.argument('name')
 @click.pass_obj
 @async_cmd
-async def image_pull(ctx, name):
+async def image_pull(ctx):
+    name = click.get_current_context().meta['image_name']
     image = _get_image(ctx.layers, name)
     success = await pull_image(ctx.client, image)
     if not success:
@@ -90,10 +62,10 @@ async def image_pull(ctx, name):
 
 
 @click.command('push', help='Push image version')
-@click.argument('name')
 @click.pass_obj
 @async_cmd
-async def image_push(ctx, name):
+async def image_push(ctx):
+    name = click.get_current_context().meta['image_name']
     image = _get_image(ctx.layers, name)
     success = await push_image(ctx.client, image)
     if not success:
@@ -102,13 +74,13 @@ async def image_push(ctx, name):
 
 
 @click.command('shell', help='Inspect image using shell')
-@click.argument('name')
 @click.option('-v', '--volume', multiple=True,
               help='Mount volume: "/host" or "/host:/container" or '
                    '"/host:/container:rw"')
 @click.pass_obj
 @async_cmd
-async def image_shell(ctx, name, volume):
+async def image_shell(ctx, volume):
+    name = click.get_current_context().meta['image_name']
     image = _get_image(ctx.layers, name)
 
     volumes = []
@@ -133,12 +105,23 @@ async def image_shell(ctx, name, volume):
         sys.exit(exit_code)
 
 
+@click.pass_obj
+@async_cmd
+async def _image_run(ctx, args):
+    name = click.get_current_context().meta['image_name']
+    image = _get_image(ctx.layers, name)
+    volumes = [LocalPath('.', '.', Mode.RW)]
+
+    with config_tty() as fd:
+        exit_code = await run(ctx.client, fd, image, args,
+                              loop=ctx.loop, volumes=volumes,
+                              work_dir='.')
+        sys.exit(exit_code)
+
+
 _Tag = namedtuple('_Tag', 'value created')
 
 
-@click.command('gc', help='Delete old image versions')
-@click.option('-c', '--count', type=click.INT, default=2, show_default=True,
-              help='How much versions to leave')
 @click.pass_obj
 @async_cmd
 async def image_gc(ctx, count):
@@ -174,28 +157,76 @@ async def image_gc(ctx, count):
         click.echo('Removed: {}'.format(image))
 
 
+@async_cmd
+async def _image_list(ctx):
+    from .._requires.tabulate import tabulate
+
+    available = set()
+    counts = Counter()
+    sizes = {}
+    images = await ctx.client.images()
+    for image in images:
+        available.update(image['RepoTags'])
+        for repo_tag in image['RepoTags']:
+            repo, _ = repo_tag.split(':')
+            counts[repo] += 1
+            sizes[repo_tag] = image['VirtualSize']
+
+    rows = []
+    for layer in sorted(ctx.layers, key=attrgetter('name')):
+        image_name = layer.docker_image().name
+        if image_name in available:
+            pretty_name = pretty('\u2714 {_green}{}{_r}', layer.name)
+        else:
+            pretty_name = pretty('\u2717 {_red}{}{_r}', layer.name)
+        size = sizes.get(image_name, 0)
+        pretty_size = format_size(size) if size else None
+        count = counts.get(layer.image.repository, None)
+        rows.append([pretty_name, image_name, pretty_size, count])
+
+    click.echo(tabulate(rows, headers=['  Image name', 'Docker image',
+                                       'Size', 'Versions']))
+
+
+def _image_list_callback(ctx, param, value):
+    if value and not ctx.resilient_parsing:
+        _image_list(ctx.obj)
+        ctx.exit()
+
+
+def _image_gc_callback(ctx, param, value):
+    if value and not ctx.resilient_parsing:
+        image_gc(value)
+        ctx.exit()
+
+
+def _image_callback(name):
+    click.get_current_context().meta['image_name'] = name
+
+
 def create_images_cli(layers):
-    cli = click.Group()
-    image_group = click.Group('image')
+    params = [
+        click.Option(['-l', '--list'], is_flag=True, is_eager=True,
+                     expose_value=False, callback=_image_list_callback,
+                     help='Display services status'),
+        click.Option(['--gc'], type=click.INT, is_eager=True,
+                     expose_value=False, callback=_image_gc_callback,
+                     help='Delete old image versions'),
+        click.Argument(['name']),
+    ]
 
-    if layers:
-        build_help = 'Build image version'
-    else:
-        build_help = BUILD_NO_IMAGES
-    build_group = click.Group('build', help=build_help)
-    for layer in layers:
-        callback = partial(_build_image, name=layer.name)
-        callback = async_cmd(callback)
-        callback = click.pass_obj(callback)
-        cmd = click.Command(layer.name, callback=callback)
-        build_group.add_command(cmd)
-    image_group.add_command(build_group)
+    image_run = ProxyCommand('run', callback=_image_run,
+                             help='Run command in container')
 
-    image_group.add_command(image_list)
+    image_group = click.Group('image', params=params,
+                              callback=_image_callback)
+
+    image_group.add_command(image_run)
     image_group.add_command(image_pull)
     image_group.add_command(image_push)
+    image_group.add_command(image_build)
     image_group.add_command(image_shell)
-    image_group.add_command(image_gc)
 
+    cli = click.Group()
     cli.add_command(image_group)
     return cli
