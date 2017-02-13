@@ -35,11 +35,15 @@ class UI(click.CommandCollection):
     def format_commands(self, ctx, formatter):
 
         def get_rows(commands):
+            click_commands = [self.get_command(ctx, c) for c in commands]
             rows = []
-            for sub_command in commands:
-                cmd = self.get_command(ctx, sub_command)
-                prefix = '+' if isinstance(cmd, click.MultiCommand) else ' '
-                rows.append((prefix + ' ' + sub_command, cmd.short_help or ''))
+            if any(isinstance(c, click.MultiCommand) for c in click_commands):
+                for cmd in click_commands:
+                    prefix = '+' if isinstance(cmd, click.MultiCommand) else ' '
+                    rows.append((prefix + ' ' + cmd.name, cmd.short_help or ''))
+            else:
+                for cmd in click_commands:
+                    rows.append((cmd.name, cmd.short_help or ''))
             return rows
 
         core = get_rows(self._list_core_commands(ctx))
