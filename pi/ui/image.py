@@ -14,7 +14,7 @@ from ..resolve import resolve
 
 from .._requires import click
 
-from .custom import ProxyCommand
+from .common import ProxyCommand, ExtGroup
 
 
 BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
@@ -204,6 +204,16 @@ def _image_callback(name):
     click.get_current_context().meta['image_name'] = name
 
 
+def _image_ext_help(ctx, formatter):
+    if ctx.obj.layers:
+        with formatter.section('Images'):
+            formatter.write_dl([(layer.name, layer.image.description or '')
+                                for layer in ctx.obj.layers])
+    else:
+        with formatter.section('Images'):
+            formatter.write_text('--- not defined ---')
+
+
 def create_images_cli(layers):
     params = [
         click.Option(['-l', '--list'], is_flag=True, is_eager=True,
@@ -218,8 +228,10 @@ def create_images_cli(layers):
     image_run = ProxyCommand('run', callback=_image_run,
                              help='Run command in container')
 
-    image_group = click.Group('image', params=params,
-                              callback=_image_callback)
+    image_group = ExtGroup('image', params=params,
+                           callback=_image_callback,
+                           help='Images creation and delivery',
+                           ext_help=_image_ext_help)
 
     image_group.add_command(image_run)
     image_group.add_command(image_pull)

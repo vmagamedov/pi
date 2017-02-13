@@ -16,18 +16,10 @@ from ..network import ensure_network
 from ..resolve import resolve
 from ..services import ensure_running
 
+from .common import ProxyCommand
+
 
 DUMB_INIT_REMOTE_PATH = '/.pi-dumb-init'
-
-
-class ProxyCommand(click.Command):
-
-    def parse_args(self, ctx, args):
-        ctx.args = args
-
-    def invoke(self, ctx):
-        if self.callback is not None:
-            ctx.invoke(self.callback, args=ctx.args)
 
 
 def create_groups(groups_parts):

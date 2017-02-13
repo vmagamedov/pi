@@ -12,28 +12,14 @@ from ..network import ensure_network
 from ..console import pretty
 from ..services import get_volumes, service_label
 
-
-class SingleMultiCommand(click.Command):
-
-    def __init__(self, *args, ext_help=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.ext_help = ext_help
-
-    def parse_args(self, ctx, args):
-        if not args:
-            click.echo(ctx.get_help(), color=ctx.color)
-            ctx.exit()
-        return super().parse_args(ctx, args)
-
-    def format_help_text(self, ctx, formatter):
-        super().format_help_text(ctx, formatter)
-        if self.ext_help is not None:
-            self.ext_help(ctx, formatter)
+from .common import ExtGroup
 
 
+@click.command('start', help='Start service')
 @click.pass_obj
 @async_cmd
-async def _service_start(ctx, name):
+async def service_start(ctx):
+    name = click.get_current_context().meta['image_name']
     service = ctx.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
@@ -67,9 +53,11 @@ async def _service_start(ctx, name):
         click.echo('Service started')
 
 
+@click.command('stop', help='Stop service')
 @click.pass_obj
 @async_cmd
-async def _service_stop(ctx, name):
+async def service_stop(ctx):
+    name = click.get_current_context().meta['image_name']
     service = ctx.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
@@ -138,9 +126,6 @@ def _service_ext_help(ctx, formatter):
     else:
         with formatter.section('Services'):
             formatter.write_text('--- not defined ---')
-    with formatter.section('Actions'):
-        formatter.write_text('start')
-        formatter.write_text('stop')
 
 
 def _service_status_callback(ctx, param, value):
@@ -150,14 +135,8 @@ def _service_status_callback(ctx, param, value):
 
 
 @click.pass_context
-def _service_callback(ctx, name, action):
-    if action == 'start':
-        _service_start(name)
-    elif action == 'stop':
-        _service_stop(name)
-    else:
-        click.echo('Invalid action: {}'.format(action))
-        ctx.exit(1)
+def _service_callback(ctx, name):
+    click.get_current_context().meta['image_name'] = name
 
 
 def create_service_cli():
@@ -166,12 +145,15 @@ def create_service_cli():
                      expose_value=False, callback=_service_status_callback,
                      help='Display services status'),
         click.Argument(['name']),
-        click.Argument(['action']),
     ]
-    help_ = 'Services status and management'
-    service_command = SingleMultiCommand('service', params=params,
-                                         callback=_service_callback,
-                                         help=help_, ext_help=_service_ext_help)
+
+    service_group = ExtGroup('service', params=params,
+                             callback=_service_callback,
+                             help='Services status and management',
+                             ext_help=_service_ext_help)
+    service_group.add_command(service_start)
+    service_group.add_command(service_stop)
+
     cli = click.Group()
-    cli.add_command(service_command)
+    cli.add_command(service_group)
     return cli

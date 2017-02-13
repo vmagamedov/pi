@@ -123,6 +123,7 @@ class Image(MappingConstruct):
     from_ = attr.ib(default=None)  # type: Optional[Union[str, DockerImage]]
     # type: Sequence[Task]
     tasks = attr.ib(default=tuple(), hash=False, convert=_convert_tasks)
+    description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
         return visitor.visit_image(self)
