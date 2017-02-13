@@ -109,7 +109,7 @@ async def _callback(command, ctx, **params):
 
     volumes.extend(command.volumes or [])
 
-    with config_tty(command.raw_input) as fd:
+    with config_tty() as fd:
         exit_code = await run(
             ctx.client, fd, docker_image, command_run,
             loop=ctx.loop,

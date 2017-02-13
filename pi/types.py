@@ -237,7 +237,6 @@ class CommandType:
 class Command(CommandType, MappingConstruct):
     __tag__ = '!Command'
     __rename_to__ = ImmutableDict([
-        ('raw-input', 'raw_input'),
         ('network-name', 'network_name'),
     ])
 
@@ -248,7 +247,6 @@ class Command(CommandType, MappingConstruct):
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
-    raw_input = attr.ib(default=None)  # type: Optional[bool]
     requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
     network_name = attr.ib(default=None)  # type: Optional[str]
     description = attr.ib(default=None)  # type: Optional[str]

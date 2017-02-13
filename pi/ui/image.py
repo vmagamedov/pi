@@ -73,38 +73,6 @@ async def image_push(ctx):
         sys.exit(1)
 
 
-@click.command('shell', help='Inspect image using shell')
-@click.option('-v', '--volume', multiple=True,
-              help='Mount volume: "/host" or "/host:/container" or '
-                   '"/host:/container:rw"')
-@click.pass_obj
-@async_cmd
-async def image_shell(ctx, volume):
-    name = click.get_current_context().meta['image_name']
-    image = _get_image(ctx.layers, name)
-
-    volumes = []
-    for v in volume:
-        parts = v.split(':')
-        if len(parts) == 1:
-            from_, = to, = parts
-            mode = Mode.RO
-        elif len(parts) == 2:
-            from_, to = parts
-            mode = Mode.RO
-        elif len(parts) == 3:
-            from_, to, mode_raw = parts
-            mode = {'ro': Mode.RO, 'rw': Mode.RW}[mode_raw]
-        else:
-            raise TypeError('More values than expected: {!r}'.format(v))
-        volumes.append(LocalPath(from_, to, mode))
-
-    with config_tty(raw_input=True) as fd:
-        exit_code = await run(ctx.client, fd, image, '/bin/sh',
-                              loop=ctx.loop, volumes=volumes)
-        sys.exit(exit_code)
-
-
 @click.pass_obj
 @async_cmd
 async def _image_run(ctx, args):
@@ -237,7 +205,6 @@ def create_images_cli(layers):
     image_group.add_command(image_pull)
     image_group.add_command(image_push)
     image_group.add_command(image_build)
-    image_group.add_command(image_shell)
 
     cli = click.Group()
     cli.add_command(image_group)

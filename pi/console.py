@@ -21,7 +21,7 @@ AUTO_COLORS = COLORS if sys.stdout.isatty() else NO_COLORS
 
 
 @contextlib.contextmanager
-def config_tty(raw_input=False):
+def config_tty():
     if sys.stdin.isatty():
         fd = sys.stdin.fileno()
         dev_tty = None
@@ -30,10 +30,7 @@ def config_tty(raw_input=False):
         fd = dev_tty.fileno()
     old = termios.tcgetattr(fd)
     try:
-        if raw_input:
-            tty.setraw(fd)
-        else:
-            tty.setcbreak(fd)
+        tty.setraw(fd)
         yield fd
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
