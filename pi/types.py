@@ -9,6 +9,7 @@
     .. _YAML: http://yaml.org/spec/
 """
 from enum import Enum
+from collections import OrderedDict
 
 from ._requires import attr
 from ._requires.typing import Optional, Union, Any, Sequence, Mapping  # noqa
@@ -103,7 +104,8 @@ class Task:
     @classmethod
     def from_config(cls, d):
         run = d['run']
-        where = {k: v for k, v in d.items() if k != 'run'}
+        where = OrderedDict((k, v) for k, v in d.items()
+                            if k != 'run')
         return cls(run, where)
 
 
