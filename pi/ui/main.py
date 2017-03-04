@@ -5,7 +5,7 @@ from .._requires import click
 from ..types import Meta
 from ..config import read_config
 from ..images import construct_layers
-from ..context import Context
+from ..environ import Environ
 from ..services import get_services
 
 from .image import create_images_cli
@@ -72,4 +72,4 @@ def build_ui():
     commands_cli = create_commands_cli(config)
 
     ui = UI([images_cli, services_cli], [commands_cli], help=meta.description)
-    return partial(ui, obj=Context(meta, layers, services))
+    return partial(ui, obj=Environ(meta, layers, services))

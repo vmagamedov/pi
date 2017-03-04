@@ -10,7 +10,7 @@ from .._res import DUMB_INIT_LOCAL_PATH
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
 from ..images import get_docker_image
-from ..context import async_cmd
+from ..environ import async_cmd
 from ..console import config_tty
 from ..network import ensure_network
 from ..resolve import resolve
@@ -74,26 +74,26 @@ class _ParameterCreator:
                             default=param.default)
 
 
-async def _start_services(ctx, command):
-    services = [ctx.services.get(name)
+async def _start_services(env, command):
+    services = [env.services.get(name)
                 for name in command.requires or []]
-    await ensure_running(ctx.client, ctx.namespace, services)
+    await ensure_running(env.client, env.namespace, services)
 
 
-async def _callback(command, ctx, **params):
+async def _callback(command, env, **params):
     await resolve(
-        ctx.client,
-        ctx.layers,
-        ctx.services,
+        env.client,
+        env.layers,
+        env.services,
         command,
-        loop=ctx.loop,
+        loop=env.loop,
         pull=True,
         build=True,
     )
-    await _start_services(ctx, command)
-    await ensure_network(ctx.client, ctx.network)
+    await _start_services(env, command)
+    await ensure_network(env.client, env.network)
 
-    docker_image = get_docker_image(ctx.layers, command.image)
+    docker_image = get_docker_image(env.layers, command.image)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
     if isinstance(command.run, str):
@@ -111,13 +111,13 @@ async def _callback(command, ctx, **params):
 
     with config_tty() as (fd, tty):
         exit_code = await run(
-            ctx.client, fd, tty, docker_image, command_run,
-            loop=ctx.loop,
+            env.client, fd, tty, docker_image, command_run,
+            loop=env.loop,
             volumes=volumes,
             ports=command.ports,
             environ=command.environ,
             work_dir='.',
-            network=ctx.network,
+            network=env.network,
             network_alias=command.network_name,
         )
         sys.exit(exit_code)

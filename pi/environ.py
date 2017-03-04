@@ -5,7 +5,7 @@ from operator import attrgetter
 from .utils import cached_property, SequenceMap, async_func
 
 
-class Context:
+class Environ:
 
     def __init__(self, meta, layers, services):
         self._meta = meta
@@ -34,10 +34,10 @@ class Context:
 def async_cmd(func):
 
     @async_func()
-    async def async_wrapper(ctx, *args, loop, **kwargs):
-        await func(ctx, *args, **kwargs)
+    async def async_wrapper(env, *args, loop, **kwargs):
+        await func(env, *args, **kwargs)
 
-    def sync_wrapper(ctx, *args, **kwargs):
-        async_wrapper(ctx, *args, loop=ctx.loop, **kwargs)
+    def sync_wrapper(env, *args, **kwargs):
+        async_wrapper(env, *args, loop=env.loop, **kwargs)
 
     return sync_wrapper

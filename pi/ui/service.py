@@ -7,7 +7,7 @@ from ..run import start
 from ..utils import search_container, sh_to_list
 from ..types import DockerImage
 from ..images import get_docker_image
-from ..context import async_cmd
+from ..environ import async_cmd
 from ..network import ensure_network
 from ..console import pretty
 from ..services import get_volumes, service_label
@@ -18,36 +18,36 @@ from .common import ExtGroup
 @click.command('start', help='Start service')
 @click.pass_obj
 @async_cmd
-async def service_start(ctx):
+async def service_start(env):
     name = click.get_current_context().meta['image_name']
-    service = ctx.services.get(name, None)
+    service = env.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
         sys.exit(-1)
 
-    label = service_label(ctx.namespace, service)
-    containers = await ctx.client.containers(all=True)
+    label = service_label(env.namespace, service)
+    containers = await env.client.containers(all=True)
     container = next(search_container(label, containers), None)
     if container is not None:
         if container['State'] == 'running':
             click.echo('Service is already running')
         elif container['State'] == 'exited':
-            await ctx.client.start(container)
+            await env.client.start(container)
             click.echo('Started previously stopped service')
         else:
             raise NotImplementedError(container['State'])
     else:
         exec_ = sh_to_list(service.exec) if service.exec else None
         args = sh_to_list(service.args) if service.args else None
-        docker_image = get_docker_image(ctx.layers, service.image)
-        await ensure_network(ctx.client, ctx.network)
+        docker_image = get_docker_image(env.layers, service.image)
+        await ensure_network(env.client, env.network)
 
-        await start(ctx.client, docker_image, args,
+        await start(env.client, docker_image, args,
                     entrypoint=exec_,
                     volumes=get_volumes(service.volumes),
                     ports=service.ports,
                     environ=service.environ,
-                    network=ctx.network,
+                    network=env.network,
                     network_alias=service.name,
                     label=label)
         click.echo('Service started')
@@ -56,15 +56,15 @@ async def service_start(ctx):
 @click.command('stop', help='Stop service')
 @click.pass_obj
 @async_cmd
-async def service_stop(ctx):
+async def service_stop(env):
     name = click.get_current_context().meta['image_name']
-    service = ctx.services.get(name, None)
+    service = env.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
         sys.exit(-1)
 
-    label = service_label(ctx.namespace, service)
-    all_containers = await ctx.client.containers(all=True)
+    label = service_label(env.namespace, service)
+    all_containers = await env.client.containers(all=True)
     containers = list(search_container(label, all_containers))
     if not containers:
         click.echo('Service was not started')
@@ -72,14 +72,14 @@ async def service_stop(ctx):
 
     for container in containers:
         if container['State'] == 'running':
-            await ctx.client.stop(container, timeout=3)
-        await ctx.client.remove_container(container, v=True, force=True)
+            await env.client.stop(container, timeout=3)
+        await env.client.remove_container(container, v=True, force=True)
     click.echo('Service stopped')
 
 
 @async_cmd
-async def _service_status(ctx):
-    containers = await ctx.client.containers(all=True)
+async def _service_status(env):
+    containers = await env.client.containers(all=True)
 
     running = set()
     exited = set()
@@ -93,8 +93,8 @@ async def _service_status(ctx):
             images[label] = container['Image']
 
     rows = []
-    for service in ctx.services:
-        label = service_label(ctx.namespace, service)
+    for service in env.services:
+        label = service_label(env.namespace, service)
         if label in running:
             status = pretty('{_green}running{_r}')
             image = images[label]
@@ -108,7 +108,7 @@ async def _service_status(ctx):
         if isinstance(service.image, DockerImage):
             docker_image = service.image
         else:
-            docker_image = ctx.layers.get(service).docker_image()
+            docker_image = env.layers.get(service).docker_image()
 
         if image is not None and image != docker_image.name:
             image += ' (obsolete)'
@@ -134,8 +134,7 @@ def _service_status_callback(ctx, param, value):
         ctx.exit()
 
 
-@click.pass_context
-def _service_callback(ctx, name):
+def _service_callback(name):
     click.get_current_context().meta['image_name'] = name
 
 

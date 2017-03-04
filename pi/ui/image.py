@@ -9,7 +9,7 @@ from ..types import DockerImage, Mode, LocalPath
 from ..utils import format_size
 from ..images import pull as pull_image, push as push_image
 from ..console import pretty, config_tty
-from ..context import async_cmd
+from ..environ import async_cmd
 from ..resolve import resolve
 
 from .._requires import click
@@ -23,15 +23,15 @@ BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 @click.command('build', help='Build image')
 @click.pass_obj
 @async_cmd
-async def image_build(ctx):
+async def image_build(env):
     name = click.get_current_context().meta['image_name']
-    image = ctx.layers.get(name).image
+    image = env.layers.get(name).image
     failed = await resolve(
-        ctx.client,
-        ctx.layers,
-        ctx.services,
+        env.client,
+        env.layers,
+        env.services,
         image,
-        loop=ctx.loop,
+        loop=env.loop,
         pull=True,
         build=True,
     )
@@ -52,10 +52,10 @@ def _get_image(layers, name):
 @click.command('pull', help='Pull image version')
 @click.pass_obj
 @async_cmd
-async def image_pull(ctx):
+async def image_pull(env):
     name = click.get_current_context().meta['image_name']
-    image = _get_image(ctx.layers, name)
-    success = await pull_image(ctx.client, image)
+    image = _get_image(env.layers, name)
+    success = await pull_image(env.client, image)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
@@ -64,10 +64,10 @@ async def image_pull(ctx):
 @click.command('push', help='Push image version')
 @click.pass_obj
 @async_cmd
-async def image_push(ctx):
+async def image_push(env):
     name = click.get_current_context().meta['image_name']
-    image = _get_image(ctx.layers, name)
-    success = await push_image(ctx.client, image)
+    image = _get_image(env.layers, name)
+    success = await push_image(env.client, image)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)
@@ -75,14 +75,14 @@ async def image_push(ctx):
 
 @click.pass_obj
 @async_cmd
-async def _image_run(ctx, args):
+async def _image_run(env, args):
     name = click.get_current_context().meta['image_name']
-    image = _get_image(ctx.layers, name)
+    image = _get_image(env.layers, name)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
     with config_tty() as (fd, tty):
-        exit_code = await run(ctx.client, fd, tty, image, args,
-                              loop=ctx.loop, volumes=volumes,
+        exit_code = await run(env.client, fd, tty, image, args,
+                              loop=env.loop, volumes=volumes,
                               work_dir='.')
         sys.exit(exit_code)
 
@@ -92,18 +92,18 @@ _Tag = namedtuple('_Tag', 'value created')
 
 @click.pass_obj
 @async_cmd
-async def image_gc(ctx, count):
+async def image_gc(env, count):
     if count < 0:
         click.echo('Count should be more or equal to 0')
         sys.exit(-1)
-    known_repos = {l.image.repository for l in ctx.layers}
-    containers = await ctx.client.containers(all=True)
+    known_repos = {l.image.repository for l in env.layers}
+    containers = await env.client.containers(all=True)
     repo_tags_used = {c['Image'] for c in containers}
 
     by_repo = defaultdict(list)
     to_delete = []
 
-    images = await ctx.client.images()
+    images = await env.client.images()
     for image in images:
         repo_tags = set(image['RepoTags'])
         if repo_tags == {'<none>:<none>'}:
@@ -121,18 +121,18 @@ async def image_gc(ctx, count):
             to_delete.append('{}:{}'.format(repo, tag.value))
 
     for image in to_delete:
-        await ctx.client.remove_image(image)
+        await env.client.remove_image(image)
         click.echo('Removed: {}'.format(image))
 
 
 @async_cmd
-async def _image_list(ctx):
+async def _image_list(env):
     from .._requires.tabulate import tabulate
 
     available = set()
     counts = Counter()
     sizes = {}
-    images = await ctx.client.images()
+    images = await env.client.images()
     for image in images:
         available.update(image['RepoTags'])
         for repo_tag in image['RepoTags']:
@@ -141,7 +141,7 @@ async def _image_list(ctx):
             sizes[repo_tag] = image['VirtualSize']
 
     rows = []
-    for layer in sorted(ctx.layers, key=attrgetter('name')):
+    for layer in sorted(env.layers, key=attrgetter('name')):
         image_name = layer.docker_image().name
         if image_name in available:
             pretty_name = pretty('\u2714 {_green}{}{_r}', layer.name)
