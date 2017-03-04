@@ -109,9 +109,9 @@ async def _callback(command, ctx, **params):
 
     volumes.extend(command.volumes or [])
 
-    with config_tty() as fd:
+    with config_tty() as (fd, tty):
         exit_code = await run(
-            ctx.client, fd, docker_image, command_run,
+            ctx.client, fd, tty, docker_image, command_run,
             loop=ctx.loop,
             volumes=volumes,
             ports=command.ports,

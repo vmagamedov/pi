@@ -92,7 +92,7 @@ def _port_binds(ports):
             for e in ports}
 
 
-async def start(client, image, command, *, entrypoint=None,
+async def start(client, image, command, *, tty=True, entrypoint=None,
                 volumes=None, ports=None, environ=None, work_dir=None,
                 network=None, network_alias=None, label=None):
     volumes = volumes or []
@@ -121,7 +121,7 @@ async def start(client, image, command, *, entrypoint=None,
             image=image.name,
             command=command,
             stdin_open=True,
-            tty=True,
+            tty=tty,
             ports=container_ports,
             environment=environ,
             volumes=container_volumes,
@@ -151,7 +151,7 @@ async def resize(client, container):
         log.debug('Failed to resize terminal: %s', e)
 
 
-async def attach(client, container, input_fd, *, loop, wait_exit=10):
+async def attach(client, container, stdin_fd, *, loop, wait_exit=10):
     params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
     async with client.attach_socket(container, params) as sock_io:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
@@ -162,7 +162,7 @@ async def attach(client, container, input_fd, *, loop, wait_exit=10):
         socket_writer_task = loop.create_task(
             socket_writer(sock, container_input, loop=loop))
         stdin_reader_task = loop.create_task(
-            stdin_reader(input_fd, container_input, loop=loop))
+            stdin_reader(stdin_fd, container_input, loop=loop))
 
         container_output = Queue(loop=loop)
         stdout_writer_task = loop.create_task(
@@ -187,17 +187,17 @@ async def attach(client, container, input_fd, *, loop, wait_exit=10):
         return exit_code
 
 
-async def run(client, input_fd, image, command, *, loop,
+async def run(client, stdin_fd, tty, image, command, *, loop,
               volumes=None, ports=None, environ=None, work_dir=None,
               network=None, network_alias=None, wait_exit=3):
-    c = await start(client, image, command, volumes=volumes,
+    c = await start(client, image, command, tty=tty, volumes=volumes,
                     ports=ports, environ=environ, work_dir=work_dir,
                     network=network, network_alias=network_alias)
     if c is None:
         return
     try:
         await resize(client, c)
-        exit_code = await attach(client, c, input_fd, loop=loop,
+        exit_code = await attach(client, c, stdin_fd, loop=loop,
                                  wait_exit=wait_exit)
         if exit_code is None:
             exit_code = await client.wait(c)

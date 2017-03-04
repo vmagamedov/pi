@@ -80,8 +80,8 @@ async def _image_run(ctx, args):
     image = _get_image(ctx.layers, name)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
-    with config_tty() as fd:
-        exit_code = await run(ctx.client, fd, image, args,
+    with config_tty() as (fd, tty):
+        exit_code = await run(ctx.client, fd, tty, image, args,
                               loop=ctx.loop, volumes=volumes,
                               work_dir='.')
         sys.exit(exit_code)
