@@ -141,12 +141,12 @@ async def _image_list(env):
             sizes[repo_tag] = image['VirtualSize']
 
     rows = []
-    for layer in sorted(env.layers, key=attrgetter('name')):
+    for layer in sorted(env.layers, key=lambda i: i.image.name):
         image_name = layer.docker_image().name
         if image_name in available:
-            pretty_name = pretty('\u2714 {_green}{}{_r}', layer.name)
+            pretty_name = pretty('\u2714 {_green}{}{_r}', layer.image.name)
         else:
-            pretty_name = pretty('\u2717 {_red}{}{_r}', layer.name)
+            pretty_name = pretty('\u2717 {_red}{}{_r}', layer.image.name)
         size = sizes.get(image_name, 0)
         pretty_size = format_size(size) if size else None
         count = counts.get(layer.image.repository, None)
@@ -175,7 +175,8 @@ def _image_callback(name):
 def _image_ext_help(ctx, formatter):
     if ctx.obj.layers:
         with formatter.section('Images'):
-            formatter.write_dl([(layer.name, layer.image.description or '')
+            formatter.write_dl([(layer.image.name,
+                                 layer.image.description or '')
                                 for layer in ctx.obj.layers])
     else:
         with formatter.section('Images'):

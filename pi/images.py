@@ -12,10 +12,6 @@ class Layer:
         self.image = image
         self.parent = parent
 
-    @property
-    def name(self):
-        return self.image.name
-
     def hash(self):
         if self._hash is None:
             h = hashlib.sha1()

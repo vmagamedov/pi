@@ -10,7 +10,7 @@ class Environ:
     def __init__(self, meta, layers, services):
         self._meta = meta
         self.loop = asyncio.get_event_loop()
-        self.layers = SequenceMap(layers, attrgetter('name'))
+        self.layers = SequenceMap(layers, lambda i: i.image.name)
         self.services = SequenceMap(services, attrgetter('name'))
 
     @property
