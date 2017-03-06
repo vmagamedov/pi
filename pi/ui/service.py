@@ -5,8 +5,7 @@ from .._requires.tabulate import tabulate
 
 from ..run import start
 from ..utils import search_container, sh_to_list
-from ..types import DockerImage
-from ..images import get_docker_image
+from ..images import docker_image
 from ..environ import async_cmd
 from ..network import ensure_network
 from ..console import pretty
@@ -39,10 +38,10 @@ async def service_start(env):
     else:
         exec_ = sh_to_list(service.exec) if service.exec else None
         args = sh_to_list(service.args) if service.args else None
-        docker_image = get_docker_image(env.layers, service.image)
+        di = docker_image(env, service.image)
         await ensure_network(env.client, env.network)
 
-        await start(env.client, docker_image, args,
+        await start(env.client, di, args,
                     entrypoint=exec_,
                     volumes=get_volumes(service.volumes),
                     ports=service.ports,
@@ -105,12 +104,9 @@ async def _service_status(env):
             status = None
             image = None
 
-        if isinstance(service.image, DockerImage):
-            docker_image = service.image
-        else:
-            docker_image = env.layers.get(service).docker_image()
+        di = docker_image(env.images, service.image)
 
-        if image is not None and image != docker_image.name:
+        if image is not None and image != di.name:
             image += ' (obsolete)'
 
         rows.append([service.name, status, image])

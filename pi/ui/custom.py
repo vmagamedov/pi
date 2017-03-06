@@ -9,7 +9,7 @@ from .._res import DUMB_INIT_LOCAL_PATH
 
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
-from ..images import get_docker_image
+from ..images import docker_image
 from ..environ import async_cmd
 from ..console import config_tty
 from ..network import ensure_network
@@ -83,7 +83,7 @@ async def _start_services(env, command):
 async def _callback(command, env, **params):
     await resolve(
         env.client,
-        env.layers,
+        env.images,
         env.services,
         command,
         loop=env.loop,
@@ -93,7 +93,7 @@ async def _callback(command, env, **params):
     await _start_services(env, command)
     await ensure_network(env.client, env.network)
 
-    docker_image = get_docker_image(env.layers, command.image)
+    di = docker_image(env.images, command.image)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
     if isinstance(command.run, str):
@@ -111,7 +111,7 @@ async def _callback(command, env, **params):
 
     with config_tty() as (fd, tty):
         exit_code = await run(
-            env.client, fd, tty, docker_image, command_run,
+            env.client, fd, tty, di, command_run,
             loop=env.loop,
             volumes=volumes,
             ports=command.ports,

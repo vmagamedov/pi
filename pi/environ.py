@@ -1,17 +1,15 @@
 import asyncio
 
-from operator import attrgetter
-
 from .utils import cached_property, SequenceMap, async_func
 
 
 class Environ:
 
-    def __init__(self, meta, layers, services):
+    def __init__(self, meta, images, services):
         self._meta = meta
         self.loop = asyncio.get_event_loop()
-        self.layers = SequenceMap(layers, lambda i: i.image.name)
-        self.services = SequenceMap(services, attrgetter('name'))
+        self.images = SequenceMap(images, lambda i: i.name)
+        self.services = SequenceMap(services, lambda i: i.name)
 
     @property
     def namespace(self):

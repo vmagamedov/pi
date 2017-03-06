@@ -95,11 +95,18 @@ class DockerImage(ScalarConstruct):
     def accept(self, visitor):
         return visitor.visit_dockerimage(self)
 
+    @classmethod
+    def from_image(cls, image, version):
+        return cls('{}:{}'.format(image.repository, version))
+
 
 @attr.s
 class Task:
     run = attr.ib()
     where = attr.ib(default=attr.Factory(dict))
+
+    def accept(self, visitor):
+        return visitor.visit_task(self)
 
     @classmethod
     def from_config(cls, d):

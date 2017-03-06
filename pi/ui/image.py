@@ -7,7 +7,8 @@ from collections import Counter, namedtuple
 from ..run import run
 from ..types import DockerImage, Mode, LocalPath
 from ..utils import format_size
-from ..images import pull as pull_image, push as push_image
+from ..images import pull as pull_image, push as push_image, docker_image
+from ..images import image_versions
 from ..console import pretty, config_tty
 from ..environ import async_cmd
 from ..resolve import resolve
@@ -25,10 +26,10 @@ BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
 @async_cmd
 async def image_build(env):
     name = click.get_current_context().meta['image_name']
-    image = env.layers.get(name).image
+    image = env.images.get(name)
     failed = await resolve(
         env.client,
-        env.layers,
+        env.images,
         env.services,
         image,
         loop=env.loop,
@@ -40,13 +41,13 @@ async def image_build(env):
         sys.exit(1)
 
 
-def _get_image(layers, name):
+def _get_image(images_map, name):
     try:
-        layer = layers.get(name)
+        image = images_map.get(name)
     except KeyError:
         return DockerImage(name)
     else:
-        return layer.docker_image()
+        return docker_image(images_map, image)
 
 
 @click.command('pull', help='Pull image version')
@@ -54,7 +55,7 @@ def _get_image(layers, name):
 @async_cmd
 async def image_pull(env):
     name = click.get_current_context().meta['image_name']
-    image = _get_image(env.layers, name)
+    image = _get_image(env.images, name)
     success = await pull_image(env.client, image)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
@@ -66,7 +67,7 @@ async def image_pull(env):
 @async_cmd
 async def image_push(env):
     name = click.get_current_context().meta['image_name']
-    image = _get_image(env.layers, name)
+    image = _get_image(env.images, name)
     success = await push_image(env.client, image)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
@@ -77,7 +78,7 @@ async def image_push(env):
 @async_cmd
 async def _image_run(env, args):
     name = click.get_current_context().meta['image_name']
-    image = _get_image(env.layers, name)
+    image = _get_image(env.images, name)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
     with config_tty() as (fd, tty):
@@ -96,7 +97,7 @@ async def image_gc(env, count):
     if count < 0:
         click.echo('Count should be more or equal to 0')
         sys.exit(-1)
-    known_repos = {l.image.repository for l in env.layers}
+    known_repos = {i.repository for i in env.images}
     containers = await env.client.containers(all=True)
     repo_tags_used = {c['Image'] for c in containers}
 
@@ -125,10 +126,7 @@ async def image_gc(env, count):
         click.echo('Removed: {}'.format(image))
 
 
-@async_cmd
-async def _image_list(env):
-    from .._requires.tabulate import tabulate
-
+async def get_images_info(env):
     available = set()
     counts = Counter()
     sizes = {}
@@ -139,18 +137,28 @@ async def _image_list(env):
             repo, _ = repo_tag.split(':')
             counts[repo] += 1
             sizes[repo_tag] = image['VirtualSize']
+    return available, counts, sizes
+
+
+@async_cmd
+async def _image_list(env):
+    from .._requires.tabulate import tabulate
+
+    available, counts, sizes = await get_images_info(env)
+    images = sorted(env.images, key=lambda i: i.name)
+    versions = image_versions(env.images, images)
 
     rows = []
-    for layer in sorted(env.layers, key=lambda i: i.image.name):
-        image_name = layer.docker_image().name
-        if image_name in available:
-            pretty_name = pretty('\u2714 {_green}{}{_r}', layer.image.name)
+    for image, version in zip(images, versions):
+        di = DockerImage.from_image(image, version)
+        if di.name in available:
+            pretty_name = pretty('\u2714 {_green}{}{_r}', image.name)
         else:
-            pretty_name = pretty('\u2717 {_red}{}{_r}', layer.image.name)
-        size = sizes.get(image_name, 0)
+            pretty_name = pretty('\u2717 {_red}{}{_r}', image.name)
+        size = sizes.get(di.name, 0)
         pretty_size = format_size(size) if size else None
-        count = counts.get(layer.image.repository, None)
-        rows.append([pretty_name, image_name, pretty_size, count])
+        count = counts.get(image.repository, None)
+        rows.append([pretty_name, di.name, pretty_size, count])
 
     click.echo(tabulate(rows, headers=['  Image name', 'Docker image',
                                        'Size', 'Versions']))
@@ -173,17 +181,17 @@ def _image_callback(name):
 
 
 def _image_ext_help(ctx, formatter):
-    if ctx.obj.layers:
+    if ctx.obj.images:
         with formatter.section('Images'):
-            formatter.write_dl([(layer.image.name,
-                                 layer.image.description or '')
-                                for layer in ctx.obj.layers])
+            formatter.write_dl([(image.name,
+                                 image.description or '')
+                                for image in ctx.obj.images])
     else:
         with formatter.section('Images'):
             formatter.write_text('--- not defined ---')
 
 
-def create_images_cli(layers):
+def create_images_cli():
     params = [
         click.Option(['-l', '--list'], is_flag=True, is_eager=True,
                      expose_value=False, callback=_image_list_callback,

@@ -17,6 +17,7 @@ from ._requires import requests
 
 from .types import ActionType
 from .utils import terminate
+from .images import docker_image, image_versions
 
 
 class ResultBase:
@@ -237,11 +238,9 @@ async def _exec(client, container, cmd):
     return exit_code
 
 
-async def build(client, layer, tasks, *, loop):
-    if layer.parent:
-        from_ = layer.parent.docker_image()
-    else:
-        from_ = layer.image.from_
+async def build(client, images_map, image, *, loop):
+    version, = image_versions(images_map, [image])
+    from_ = docker_image(images_map, image.from_)
 
     io_queue = Queue()
     io_executor = IOExecutor(loop=loop)
@@ -250,7 +249,7 @@ async def build(client, layer, tasks, *, loop):
     cpu_queue = Queue()
     cpu_executor = CPUExecutor(process_pool, loop=loop)
 
-    states = get_action_states(tasks, loop=loop)
+    states = get_action_states(image.tasks, loop=loop)
     submitted_states = set()
 
     io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
@@ -267,10 +266,10 @@ async def build(client, layer, tasks, *, loop):
 
         await ActionDispatcher.dispatch(states, io_queue, cpu_queue)
 
-        total = len(tasks)
+        total = len(image.tasks)
         padding = math.ceil(math.log10(total + 1))
 
-        for i, task in enumerate(tasks, 1):
+        for i, task in enumerate(image.tasks, 1):
             task_states = {action: states[action]
                            for action in iter_actions(task)}
 
@@ -303,11 +302,7 @@ async def build(client, layer, tasks, *, loop):
             return False
 
         await client.pause(c)
-        await client.commit(
-            c,
-            layer.image.repository,
-            layer.version(),
-        )
+        await client.commit(c, image.repository, version)
         await client.unpause(c)
         return True
 

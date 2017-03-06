@@ -8,7 +8,7 @@ from ._requires import attr
 
 from .utils import MessageType, terminate
 from .types import DockerImage
-from .images import pull as pull_image
+from .images import pull as pull_image, image_versions
 from .images import build as build_image
 
 
@@ -23,16 +23,16 @@ class Dep:
 
 class ImagesCollector:
 
-    def __init__(self, layers, services):
-        self._layers = layers
-        self._services = services
-        self._images = set()
+    def __init__(self, images_map, services_map):
+        self._images_map = images_map
+        self._services_map = services_map
+        self._deps = set()
 
     @classmethod
-    def collect(cls, layers, services, obj):
-        self = cls(layers, services)
+    def collect(cls, images_map, services_map, obj):
+        self = cls(images_map, services_map)
         self.visit(obj)
-        return list(self._images)
+        return list(self._deps)
 
     def visit(self, obj):
         return obj.accept(self)
@@ -45,12 +45,13 @@ class ImagesCollector:
 
     def add(self, image):
         if isinstance(image, DockerImage):
-            self._images.add(Dep(None, image))
+            self._deps.add(Dep(None, image))
         else:
-            layer = self._layers.get(image)
-            self._images.add(Dep(layer.image, layer.docker_image()))
-            if layer.image.from_ is not None:
-                self.add(layer.image.from_)
+            image = self._images_map.get(image)
+            version, = image_versions(self._images_map, [image])
+            self._deps.add(Dep(image, DockerImage.from_image(image, version)))
+            if image.from_ is not None:
+                self.add(image.from_)
 
     def visit_service(self, obj):
         self.add(obj.image)
@@ -58,7 +59,7 @@ class ImagesCollector:
     def visit_command(self, obj):
         self.add(obj.image)
         for service_name in (obj.requires or []):
-            self.visit(self._services.get(service_name))
+            self.visit(self._services_map.get(service_name))
 
 
 PULL_DONE = MessageType('PULL_DONE')
@@ -80,12 +81,11 @@ async def pull_worker(client, queue, result_queue):
             await result_queue.put((status, dep))
 
 
-async def build_worker(client, layers, queue, result_queue, *, loop):
+async def build_worker(client, images_map, queue, result_queue, *, loop):
     while True:
         dep = await queue.get()
         try:
-            layer = layers.get(dep.image.name)
-            result = await build_image(client, layer, dep.image.tasks,
+            result = await build_image(client, images_map, dep.image,
                                        loop=loop)
         except Exception:
             log.exception('Failed to build image')
@@ -159,9 +159,9 @@ def mark_failed(deps_map, in_work, item):
     return failed
 
 
-async def resolve(client, layers, services, obj, *, loop,
+async def resolve(client, images_map, services_map, obj, *, loop,
                   pull=False, build=False, fail_fast=False):
-    deps = ImagesCollector.collect(layers, services, obj)
+    deps = ImagesCollector.collect(images_map, services_map, obj)
     missing = await check(client, deps)
     if not missing or not (pull or build):
         return missing
@@ -180,7 +180,7 @@ async def resolve(client, layers, services, obj, *, loop,
         pull_worker(client, pull_queue, result_queue)
     )
     builder_task = loop.create_task(
-        build_worker(client, layers, build_queue, result_queue, loop=loop)
+        build_worker(client, images_map, build_queue, result_queue, loop=loop)
     )
     try:
         while deps_map or in_work:

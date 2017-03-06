@@ -1,39 +1,70 @@
 import sys
 import hashlib
-import binascii
 
-from .types import DockerImage, Image
-
-
-class Layer:
-    _hash = None
-
-    def __init__(self, image, *, parent=None):
-        self.image = image
-        self.parent = parent
-
-    def hash(self):
-        if self._hash is None:
-            h = hashlib.sha1()
-            if self.parent is not None:
-                h.update(self.parent.hash())
-            for task in self.image.tasks:
-                h.update(repr(task).encode('utf-8'))
-            self._hash = h.digest()
-        return self._hash
-
-    def version(self):
-        return binascii.hexlify(self.hash()).decode('ascii')[:12]
-
-    def docker_image(self):
-        return DockerImage('{}:{}'.format(self.image.repository,
-                                          self.version()))
+from .types import DockerImage, Image, ActionType
 
 
-def get_docker_image(layers, image):
+class Hasher:
+
+    def visit(self, obj):
+        return obj.accept(self)
+
+    def visit_image(self, obj):
+        yield obj.repository
+        for task in obj.tasks:
+            yield from self.visit(task)
+
+    def visit_task(self, obj):
+        yield obj.run
+        for value in obj.where.values():
+            if isinstance(value, ActionType):
+                yield from self.visit(value)
+            else:
+                yield str(value)
+
+    def visit_download(self, obj):
+        yield obj.url
+
+    def visit_bundle(self, obj):
+        yield obj.path
+
+
+def image_hashes(images_map, images, *, _cache=None):
+    _cache = _cache or {}
+
+    hasher = Hasher()
+    hashes = []
+    for image in images:
+        if image.name in _cache:
+            hashes.append(_cache[image.name])
+            continue
+
+        if isinstance(image.from_, DockerImage):
+            parent_hashable = image.from_.name
+        else:
+            parent = images_map.get(image.from_)
+            parent_hashable, = image_hashes(images_map, [parent],
+                                            _cache=_cache)
+
+        h = hashlib.sha1()
+        h.update(parent_hashable.encode('utf-8'))
+        for chunk in hasher.visit(image):
+            h.update(chunk.encode('utf-8'))
+        hex_digest = _cache[image.name] = h.hexdigest()
+        hashes.append(hex_digest)
+    return hashes
+
+
+def image_versions(images_map, images):
+    hashes = image_hashes(images_map, images)
+    return [h[:12] for h in hashes]
+
+
+def docker_image(images_map, image):
     if isinstance(image, str):
-        layer = layers.get(image)
-        return layer.docker_image()
+        image = images_map.get(image)
+        version, = image_versions(images_map, [image])
+        return DockerImage.from_image(image, version)
     elif isinstance(image, DockerImage):
         return image
     else:
@@ -55,33 +86,8 @@ def resolve_deps(deps):
         deps = {k: v for k, v in deps.items() if k not in resolved}
 
 
-def construct_layers(config):
-    deps = {}
-    layers = {}
-    image_by_name = {}
-
-    images = [i for i in config if isinstance(i, Image)]
-    for image in images:
-        if image.from_ is not None:
-            if not isinstance(image.from_, DockerImage):
-                deps[image.name] = image.from_
-                image_by_name[image.name] = image
-                continue
-        layers[image.name] = Layer(image, parent=None)
-
-    # check missing parents
-    missing = {name for name, parent_name in deps.items()
-               if parent_name not in deps and parent_name not in layers}
-    if missing:
-        raise TypeError('These images has missing parent images: {}'
-                        .format(', '.join(sorted(missing))))
-
-    for name, parent_name in resolve_deps(deps):
-        image = image_by_name[name]
-        parent = layers[parent_name]
-        layers[name] = Layer(image, parent=parent)
-
-    return list(layers.values())
+def get_images(config):
+    return [i for i in config if isinstance(i, Image)]
 
 
 async def _echo_download_progress(output):
@@ -141,8 +147,8 @@ async def push(client, docker_image):
         return success
 
 
-async def build(client, layer, tasks, *, loop):
+async def build(client, images_map, image, *, loop):
     from .tasks import build as build_tasks
 
-    result = await build_tasks(client, layer, tasks, loop=loop)
+    result = await build_tasks(client, images_map, image, loop=loop)
     return result

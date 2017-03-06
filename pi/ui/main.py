@@ -4,7 +4,7 @@ from .._requires import click
 
 from ..types import Meta
 from ..config import read_config
-from ..images import construct_layers
+from ..images import get_images
 from ..environ import Environ
 from ..services import get_services
 
@@ -64,12 +64,12 @@ def build_ui():
         if isinstance(obj, Meta):
             meta = obj
 
-    layers = construct_layers(config)
+    images = get_images(config)
     services = get_services(config)
 
-    images_cli = create_images_cli(layers)
+    images_cli = create_images_cli()
     services_cli = create_service_cli()
     commands_cli = create_commands_cli(config)
 
     ui = UI([images_cli, services_cli], [commands_cli], help=meta.description)
-    return partial(ui, obj=Environ(meta, layers, services))
+    return partial(ui, obj=Environ(meta, images, services))
