@@ -5,6 +5,8 @@ import logging.config
 
 from contextlib import contextmanager
 
+from . import __name__ as __root_logger__
+
 
 COLORS = {
     '_red': '\x1b[38;5;1m',
@@ -19,6 +21,12 @@ COLORS = {
 NO_COLORS = {k: '' for k in COLORS}
 
 AUTO_COLORS = COLORS if sys.stdout.isatty() else NO_COLORS
+
+LOG_FORMAT = '{asctime} {levelname} {name}: {message}'
+
+LOG_STYLE = '{'
+
+DATE_FORMAT = '%H:%M:%S'
 
 
 @contextmanager
@@ -36,27 +44,24 @@ def config_tty():
         yield fd, False
 
 
+class StreamHandler(logging.StreamHandler):
+
+    def __init__(self, stream=None):
+        super().__init__(stream)
+        # required for raw tty mode
+        if sys.stderr.isatty():
+            self.terminator = '\r\n'
+
+
 def configure_logging(debug):
-    log = logging.getLogger('pi')
+    log = logging.getLogger(__root_logger__)
     if debug:
-        logging.config.dictConfig({
-            'version': 1,
-            'formatters': {'standard': {
-                'format': '{asctime} {levelname} {name}: {message}',
-                'style': '{',
-                'datefmt': '%H:%M:%S',
-            }},
-            'handlers': {'default': {
-                'class': 'logging.StreamHandler',
-                'level': 'DEBUG',
-                'formatter': 'standard',
-                'stream': 'ext://sys.stderr',
-            }},
-            'loggers': {log.name: {
-                'handlers': ['default'],
-                'level': 'DEBUG',
-            }},
-        })
+        handler = StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT,
+                                               LOG_STYLE))
+        log.setLevel(logging.DEBUG)
+        log.addHandler(handler)
     else:
         log.disabled = True
 

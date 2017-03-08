@@ -1,4 +1,4 @@
-from functools import partial
+import logging
 
 from .._requires import click
 
@@ -6,6 +6,7 @@ from ..types import Meta
 from ..config import read_config
 from ..images import get_images
 from ..environ import Environ
+from ..console import configure_logging
 from ..services import get_services
 
 from .image import create_images_cli
@@ -13,12 +14,29 @@ from .custom import create_commands_cli
 from .service import create_service_cli
 
 
+log = logging.getLogger(__name__)
+
+
 class UI(click.CommandCollection):
 
-    def __init__(self, core, custom, **kwargs):
-        super().__init__(sources=(core + custom), **kwargs)
+    def __init__(self, config, meta, core, custom, **kwargs):
+        params = [click.Option(['--debug'], is_flag=True,
+                               help='Run in debug mode')]
+        super().__init__(sources=(core + custom), callback=self.callback,
+                         params=params, help=meta.description, **kwargs)
+        self._meta = meta
+        self._config = config
         self._core = core
         self._custom = custom
+
+    def callback(self, debug):
+        configure_logging(debug)
+
+        ctx = click.get_current_context()
+        images = get_images(self._config)
+        services = get_services(self._config)
+        ctx.obj = Environ(self._meta, images, services)
+        log.debug('Environment configured')
 
     def _list_core_commands(self, ctx):
         rv = set()
@@ -64,12 +82,8 @@ def build_ui():
         if isinstance(obj, Meta):
             meta = obj
 
-    images = get_images(config)
-    services = get_services(config)
-
     images_cli = create_images_cli()
     services_cli = create_service_cli()
     commands_cli = create_commands_cli(config)
 
-    ui = UI([images_cli, services_cli], [commands_cli], help=meta.description)
-    return partial(ui, obj=Environ(meta, images, services))
+    return UI(config, meta, [images_cli, services_cli], [commands_cli])
