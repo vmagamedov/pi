@@ -47,7 +47,7 @@ async def service_start(env):
                     ports=service.ports,
                     environ=service.environ,
                     network=env.network,
-                    network_alias=service.name,
+                    network_alias=service.network_name or service.name,
                     label=label)
         click.echo('Service started')
 

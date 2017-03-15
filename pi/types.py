@@ -198,6 +198,9 @@ class Expose(MappingConstruct):
 @attr.s
 class Service(MappingConstruct):
     __tag__ = '!Service'
+    __rename_to__ = ImmutableDict([
+        ('network-name', 'network_name'),
+    ])
 
     name = attr.ib()  # type: str
     image = attr.ib()  # type: Union[str, DockerImage]
@@ -206,6 +209,7 @@ class Service(MappingConstruct):
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
     exec = attr.ib(default=None)  # type: Union[str, Sequence[str]]
     args = attr.ib(default=None)  # type: Union[str, Sequence[str]]
+    network_name = attr.ib(default=None)  # type: Optional[str]
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
