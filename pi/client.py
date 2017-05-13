@@ -187,3 +187,12 @@ class AsyncClient:
 
     def remove_image(self, *args, **kwargs):
         return self._exec(self._client.remove_image, *args, **kwargs)
+
+    def inspect_volume(self, *args, **kwargs):
+        return self._exec(self._client.inspect_volume, *args, **kwargs)
+
+    def create_volume(self, *args, **kwargs):
+        return self._exec(self._client.create_volume, *args, **kwargs)
+
+    def inspect_container(self, *args, **kwargs):
+        return self._exec(self._client.inspect_container, *args, **kwargs)

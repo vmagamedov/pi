@@ -14,4 +14,8 @@ pi/_res/dumb-init:
 	wget -O ./pi/_res/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.1.1/dumb-init_1.1.1_amd64
 	chmod +x ./pi/_res/dumb-init
 
-all: requires pi/_res/dumb-init
+pi/_res/unison-fsmonitor:
+	wget -O ./pi/_res/unison-fsmonitor https://github.com/hnsl/unox/raw/2292f99/unox.py
+	chmod +x ./pi/_res/unison-fsmonitor
+
+all: requires pi/_res/dumb-init pi/_res/unison-fsmonitor

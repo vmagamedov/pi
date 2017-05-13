@@ -9,6 +9,7 @@ from ..environ import Environ
 from ..console import configure_logging
 from ..services import get_services
 
+from .sync import create_sync_cli
 from .image import create_images_cli
 from .custom import create_commands_cli
 from .service import create_service_cli
@@ -37,6 +38,12 @@ class UI(click.CommandCollection):
         services = get_services(self._config)
         ctx.obj = Environ(self._meta, images, services)
         log.debug('Environment configured')
+
+    def invoke(self, ctx):
+        try:
+            return super(UI, self).invoke(ctx)
+        finally:
+            ctx.obj.loop.close()
 
     def _list_core_commands(self, ctx):
         rv = set()
@@ -82,8 +89,10 @@ def build_ui():
         if isinstance(obj, Meta):
             meta = obj
 
+    sync_cli = create_sync_cli()
     images_cli = create_images_cli()
     services_cli = create_service_cli()
     commands_cli = create_commands_cli(config)
 
-    return UI(config, meta, [images_cli, services_cli], [commands_cli])
+    return UI(config, meta, [sync_cli, images_cli, services_cli],
+              [commands_cli])

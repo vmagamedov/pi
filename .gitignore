@@ -1,5 +1,6 @@
 pi/_requires/*
 pi/_res/dumb-init
+pi/_res/unison-fsmonitor
 build
 dist
 env
