@@ -5,7 +5,7 @@ from functools import partial
 from .._requires import click
 from .._requires import jinja2
 
-from .._res import DUMB_INIT_LOCAL_PATH
+from .._res import DUMB_INIT_PATH
 
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
@@ -99,7 +99,7 @@ async def _callback(command, env, **params):
     if isinstance(command.run, str):
         command_run = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
                        _render_template(command.run, params)]
-        volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
+        volumes.append(LocalPath(DUMB_INIT_PATH,
                                  DUMB_INIT_REMOTE_PATH))
 
     else:

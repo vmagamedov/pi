@@ -5,7 +5,7 @@ import asyncio
 
 from ._requires.docker.errors import NotFound
 
-from ._res import PATH
+from ._res import RES_PATH
 
 
 async def start_server(env):
@@ -81,7 +81,7 @@ async def start_client(port, agent=True, *, loop):
         server_url,  # destination
     ]
     env = dict(os.environ,
-               PATH='{}:{}'.format(PATH, os.environ['PATH']))
+               PATH='{}:{}'.format(RES_PATH, os.environ['PATH']))
     if agent:
         job = {
             'Label': 'com.github.vmagamedov.pi.sync.deadbeef',
