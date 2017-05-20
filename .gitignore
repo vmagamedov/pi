@@ -1,5 +1,5 @@
 pi/_requires/*
-pi/_res/dumb-init
+pi/_res/*
 build
 dist
 env
