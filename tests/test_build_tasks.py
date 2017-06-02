@@ -25,7 +25,7 @@ def test_task_cmd():
 
 
 async def server(content, *, loop):
-    host, port = 'localhost', 6789
+    host, port = '127.0.0.1', 6789
 
     async def handle(_):
         return web.Response(body=content)

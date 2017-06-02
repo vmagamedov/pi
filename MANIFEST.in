@@ -1,3 +1,3 @@
 include pi/_res/dumb-init
-graft pi/_res/python
 prune fixers
+prune tests
