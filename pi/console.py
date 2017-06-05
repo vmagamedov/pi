@@ -37,6 +37,10 @@ def config_tty():
         old = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
+            # fixes new-lines in raw mode
+            fixed_mode = termios.tcgetattr(fd)
+            fixed_mode[tty.OFLAG] |= tty.OPOST
+            termios.tcsetattr(fd, termios.TCSAFLUSH, fixed_mode)
             yield fd, True
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -44,19 +48,10 @@ def config_tty():
         yield fd, False
 
 
-class StreamHandler(logging.StreamHandler):
-
-    def __init__(self, stream=None):
-        super().__init__(stream)
-        # required for raw tty mode
-        if sys.stderr.isatty():
-            self.terminator = '\r\n'
-
-
 def configure_logging(debug):
     log = logging.getLogger(__root_logger__)
     if debug:
-        handler = StreamHandler()
+        handler = logging.StreamHandler()
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT,
                                                LOG_STYLE))
