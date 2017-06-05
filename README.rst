@@ -39,11 +39,12 @@ Inspect projects without leaving your shell:
       Project command-line interface
 
     Options:
-      --help  Show this message and exit.
+      --debug  Run in debug mode
+      --help   Show this message and exit.
 
     Core commands:
-      + image
-      + service
+      + image    Images creation and delivery
+      + service  Services status and management
 
     Custom commands:
       + build
@@ -66,6 +67,6 @@ leaving any traces in your system:
 
 .. code-block:: shell
 
-    $ pip3 install {COMING SOON}
+    $ pip3 install pi-env
 
 .. _YAML: http://yaml.org/spec/
