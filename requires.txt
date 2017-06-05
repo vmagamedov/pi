@@ -16,4 +16,5 @@ websocket-client==0.40.0
 attrs==16.2.0
 click==6.6
 pyyaml==3.12
+appdirs==1.4.3
 tabulate==0.7.5

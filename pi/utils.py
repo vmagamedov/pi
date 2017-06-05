@@ -2,9 +2,12 @@ import sys
 import math
 import shlex
 import signal
+import os.path
 import asyncio
 
 from collections import Sequence
+
+from ._requires import appdirs
 
 
 class MessageType:
@@ -134,3 +137,7 @@ async def terminate(task, *, loop, wait=1):
         await asyncio.wait_for(task, wait, loop=loop)
     except asyncio.CancelledError:
         pass
+
+
+def state_path():
+    return os.path.join(appdirs.user_state_dir('Pi'), 'state.sqlite')
