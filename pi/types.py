@@ -9,10 +9,10 @@
     .. _YAML: http://yaml.org/spec/
 """
 from enum import Enum
+from typing import Optional, Union, Any, Sequence, Mapping  # noqa
 from collections import OrderedDict
 
 from ._requires import attr
-from ._requires.typing import Optional, Union, Any, Sequence, Mapping  # noqa
 
 from .utils import ImmutableDict
 

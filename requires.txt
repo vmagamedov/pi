@@ -1,13 +1,19 @@
 six==1.10.0
-click==6.6
-typing==3.5.2.2
-pyyaml==3.12
-jinja2==2.8
-requests==2.11.1
-docker-py==1.10.4
+
+# Jinja2
+jinja2==2.9.6
+markupsafe==1.0
+
+# Docker
+docker==2.3.0
+urllib3==1.21.1
+chardet==3.0.3
+certifi==2017.4.17
+requests==2.17.3
 docker-pycreds==0.2.1
-markupsafe==0.23
-websocket-client==0.37.0
-backports.ssl_match_hostname==3.5.0.1
-tabulate==0.7.5
+websocket-client==0.40.0
+
 attrs==16.2.0
+click==6.6
+pyyaml==3.12
+tabulate==0.7.5

@@ -5,7 +5,7 @@ from functools import partial
 from contextlib import contextmanager
 from collections import deque
 
-from ._requires.docker import Client, errors
+from ._requires.docker import APIClient, errors
 from ._requires.docker.utils import kwargs_from_env
 
 
@@ -63,7 +63,7 @@ class DockerStreamDecoder:
             return []
 
 
-class _Client(Client):
+class _Client(APIClient):
 
     def __init__(self, *args, loop, **kwargs):
         super().__init__(*args, **kwargs)
