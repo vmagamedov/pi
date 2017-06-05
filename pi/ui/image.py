@@ -47,7 +47,7 @@ def _get_image(images_map, name):
     except KeyError:
         return DockerImage(name)
     else:
-        return docker_image(images_map, image)
+        return docker_image(images_map, image.name)
 
 
 @click.command('pull', help='Pull image version')
