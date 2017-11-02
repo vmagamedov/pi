@@ -5,7 +5,7 @@
 - !Image
   name: test-py35
   from: !DockerImage python:3.5.3-alpine
-  repository: reg.local/pi/test-py35
+  repository: localhost/pi/test-py35
   tasks:
   - run: >
       pip3 install --no-cache-dir --disable-pip-version-check
@@ -19,7 +19,7 @@
 - !Image
   name: docs
   from: !DockerImage python:3.5.3-alpine
-  repository: reg.local/pi/docs
+  repository: localhost/pi/docs
   tasks:
   - run: >
       pip3 install --no-cache-dir --disable-pip-version-check

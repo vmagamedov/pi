@@ -71,6 +71,9 @@ BUILD_FAILED = MessageType('BUILD_FAILED')
 async def pull_worker(client, queue, result_queue):
     while True:
         dep = await queue.get()
+        if dep.docker_image.name.startswith('localhost/'):
+            await result_queue.put((PULL_FAILED, dep))
+            continue
         try:
             result = await pull_image(client, dep.docker_image)
         except Exception:
