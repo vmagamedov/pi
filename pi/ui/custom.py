@@ -74,9 +74,35 @@ class _ParameterCreator:
                             default=param.default)
 
 
+def _required_services(env, obj, *, _seen=None, _all=None):
+    """
+    Yields required services in order for their start, without duplicates
+    """
+    if _seen is None or _all is None:
+        _seen = set()
+        _all = set()
+    if obj.requires:
+        for name in obj.requires:
+            if name in _all:
+                continue
+
+            try:
+                service = env.services.get(name)
+            except KeyError:
+                raise TypeError('Service "{}" is not defined'.format(name))
+            if name in _seen:
+                raise TypeError('Service "{}" has circular reference'
+                                .format(name))
+            _seen.add(name)
+            yield from _required_services(env, service, _seen=_seen, _all=_all)
+            _seen.discard(name)
+
+            yield service
+            _all.add(name)
+
+
 async def _start_services(env, command):
-    services = [env.services.get(name)
-                for name in command.requires or []]
+    services = list(_required_services(env, command))
     await ensure_running(env.client, env.namespace, services)
 
 

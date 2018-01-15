@@ -207,6 +207,7 @@ class Service(MappingConstruct):
     volumes = attr.ib(default=None)  # type: Optional[Sequence[VolumeType]]
     ports = attr.ib(default=None)  # type: Optional[Sequence[Expose]]
     environ = attr.ib(default=None)  # type: Optional[Mapping[str: str]]
+    requires = attr.ib(default=None)  # type: Optional[Sequence[str]]
     exec = attr.ib(default=None)  # type: Union[str, Sequence[str]]
     args = attr.ib(default=None)  # type: Union[str, Sequence[str]]
     network_name = attr.ib(default=None)  # type: Optional[str]

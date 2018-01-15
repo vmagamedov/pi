@@ -12,10 +12,11 @@ async def ensure_running(client, namespace, services):
         label = service_label(namespace, service)
         container = next(search_container(label, containers), None)
         if container is None:
+            # TODO: Create container
             raise RuntimeError('Service {} is not running'
                                .format(service.name))
         if container['State'] != 'running':
-            assert False, 'TODO: auto-start'
+            await client.start(container)
 
 
 def get_volumes(volumes):

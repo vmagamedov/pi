@@ -26,6 +26,7 @@ class ImagesCollector:
     def __init__(self, images_map, services_map):
         self._images_map = images_map
         self._services_map = services_map
+        self._services_seen = set()
         self._deps = set()
 
     @classmethod
@@ -54,7 +55,14 @@ class ImagesCollector:
                 self.add(image.from_)
 
     def visit_service(self, obj):
+        if obj.name in self._services_seen:
+            raise TypeError('Service "{}" has circular reference'
+                            .format(obj.name))
         self.add(obj.image)
+        self._services_seen.add(obj.name)
+        for service_name in (obj.requires or []):
+            self.visit(self._services_map.get(service_name))
+        self._services_seen.discard(obj.name)
 
     def visit_command(self, obj):
         self.add(obj.image)
