@@ -73,6 +73,19 @@ def download(url, file_name, destination):
                         fileobj=tmp)
 
 
+def file_(path, file_name, destination):
+    file_path = Path(path).resolve()
+    assert file_path.is_file(), file_path
+
+    cur_path = Path('.').resolve()
+    assert cur_path in file_path.parents, file_path
+
+    with open(str(file_path), 'rb') as f:
+        with tarfile.open(file_name, mode='w:tar') as tar:
+            tar.addfile(tar.gettarinfo(arcname=destination, fileobj=f),
+                        fileobj=f)
+
+
 def bundle(action_path, file_name, destination):
     dir_path = Path(action_path).resolve()  # FIXME: raises FileNotFoundError
     assert dir_path.is_dir(), dir_path
@@ -148,6 +161,9 @@ class ActionDispatcher:
     async def visit_download(self, obj):
         await self.io_queue.put((obj, self.states[obj]))
 
+    async def visit_file(self, obj):
+        await self.cpu_queue.put((obj, self.states[obj]))
+
     async def visit_bundle(self, obj):
         await self.cpu_queue.put((obj, self.states[obj]))
 
@@ -185,6 +201,17 @@ class CPUExecutor:
     def visit(self, action):
         return action.accept(self)
 
+    async def file(self, action, state):
+        try:
+            await self.loop.run_in_executor(
+                self.process_pool,
+                file_, action.path, state.result.file.name, state.result.uuid
+            )
+        except Exception as err:
+            state.error = str(err)
+        finally:
+            state.complete.set()
+
     async def bundle(self, action, state):
         try:
             await self.loop.run_in_executor(
@@ -195,6 +222,9 @@ class CPUExecutor:
             state.error = str(err)
         finally:
             state.complete.set()
+
+    def visit_file(self, obj):
+        return self.file
 
     def visit_bundle(self, obj):
         return self.bundle

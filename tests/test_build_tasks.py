@@ -7,7 +7,7 @@ import pytest
 
 from aiohttp import web
 
-from pi.types import Download, Bundle, Task
+from pi.types import Download, File, Bundle, Task
 from pi.tasks import IOExecutor, CPUExecutor
 from pi.tasks import task_cmd, get_action_states
 
@@ -67,6 +67,26 @@ async def test_download(loop):
                     assert f.read() == content
     finally:
         await close()
+
+
+@pytest.mark.asyncio
+async def test_file(loop):
+    file_path = 'requires.txt'
+    with open(file_path, 'rb') as f:
+        content = f.read()
+    action = File(file_path)
+    task = Task('whatever', where={'ardeche': action})
+    states = get_action_states([task], loop=loop)
+    state = states[action]
+    with closing(state.result):
+        with ProcessPoolExecutor() as process_pool:
+            executor = CPUExecutor(process_pool, loop=loop)
+            process = executor.visit(action)
+            await process(action, state)
+            with tarfile.open(state.result.file.name) as tmp_tar:
+                assert state.result.uuid in tmp_tar.getnames()
+                with tmp_tar.extractfile(state.result.uuid) as f:
+                    assert f.read() == content
 
 
 @pytest.mark.asyncio

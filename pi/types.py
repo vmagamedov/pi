@@ -286,6 +286,16 @@ class Download(ActionType, ScalarConstruct):
 
 
 @attr.s
+class File(ActionType, ScalarConstruct):
+    __tag__ = '!File'
+
+    path = attr.ib()
+
+    def accept(self, visitor):
+        return visitor.visit_file(self)
+
+
+@attr.s
 class Bundle(ActionType, ScalarConstruct):
     __tag__ = '!Bundle'
 

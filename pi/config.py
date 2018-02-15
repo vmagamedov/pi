@@ -69,6 +69,7 @@ Loader.register(types.LocalPath)
 Loader.register(types.NamedVolume)
 Loader.register(types.Expose)
 Loader.register(types.Download)
+Loader.register(types.File)
 Loader.register(types.Bundle)
 Loader.register_enum(types.Mode)
 

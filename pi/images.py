@@ -25,6 +25,9 @@ class Hasher:
     def visit_download(self, obj):
         yield obj.url
 
+    def visit_file(self, obj):
+        yield obj.path
+
     def visit_bundle(self, obj):
         yield obj.path
 
