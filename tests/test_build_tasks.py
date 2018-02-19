@@ -91,7 +91,7 @@ async def test_file(loop):
 
 @pytest.mark.asyncio
 async def test_bundle(loop):
-    action = Bundle('pi/ui')
+    action = Bundle('tests/stub-l1')
     task = Task('whatever', where={'twihard': action})
     states = get_action_states([task], loop=loop)
     state = states[action]
@@ -101,5 +101,5 @@ async def test_bundle(loop):
             process = executor.visit(action)
             await process(action, state)
             with tarfile.open(state.result.file.name) as tmp:
-                file_path = '{}/pi/ui/__init__.py'.format(state.result.uuid)
+                file_path = '{}/stub-l2/stub.txt'.format(state.result.uuid)
                 assert file_path in tmp.getnames()

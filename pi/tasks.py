@@ -93,30 +93,24 @@ def bundle(action_path, file_name, destination):
     cur_path = Path('.').resolve()
     assert cur_path in dir_path.parents, dir_path
 
-    rel_path = dir_path.relative_to(cur_path)
-
-    def filter_(path_):
-        # TODO: ability to exclude (.gitignore? .hgignore?)
-        return True
-
     def _arc_path(path_):
         return os.path.join(destination, unicodedata.normalize('NFC', path_))
 
     with tarfile.open(file_name, mode='w:tar') as tar:
-        for path, _, names in os.walk(str(rel_path)):
-            if not filter_(path):
-                continue
+        for abs_path, _, names in os.walk(str(dir_path)):
+            rel_path = Path(abs_path).relative_to(dir_path)
+            if rel_path != Path('.'):
+                tar.addfile(tar.gettarinfo(abs_path, _arc_path(str(rel_path))))
 
-            tar.addfile(tar.gettarinfo(path, _arc_path(path)))
             for name in names:
-                file_path = os.path.join(path, name)
-                if not filter_(file_path):
-                    continue
-
-                with open(file_path, 'rb') as f:
-                    tar.addfile(tar.gettarinfo(arcname=_arc_path(file_path),
-                                               fileobj=f),
-                                fileobj=f)
+                file_abs_path = os.path.join(abs_path, name)
+                file_rel_path = str(rel_path.joinpath(name))
+                with open(file_abs_path, 'rb') as f:
+                    tar.addfile(
+                        tar.gettarinfo(arcname=_arc_path(str(file_rel_path)),
+                                       fileobj=f),
+                        fileobj=f,
+                    )
 
 
 def iter_actions(task):
