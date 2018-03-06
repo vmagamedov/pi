@@ -10,26 +10,32 @@ class Hasher:
         return obj.accept(self)
 
     def visit_image(self, obj):
-        yield obj.repository
+        yield obj.repository.encode('utf-8')
         for task in obj.tasks:
             yield from self.visit(task)
 
     def visit_task(self, obj):
-        yield obj.run
+        yield obj.run.encode('utf-8')
         for value in obj.where.values():
             if isinstance(value, ActionType):
                 yield from self.visit(value)
             else:
-                yield str(value)
+                yield str(value).encode('utf-8')
 
     def visit_download(self, obj):
-        yield obj.url
+        yield obj.url.encode('utf-8')
 
     def visit_file(self, obj):
-        yield obj.path
+        with open(obj.path, 'rb') as f:
+            while True:
+                chunk = f.read(2**16)
+                if not chunk:
+                    break
+                else:
+                    yield chunk
 
     def visit_bundle(self, obj):
-        yield obj.path
+        yield obj.path.encode('utf-8')
 
 
 def image_hashes(images_map, images, *, _cache=None):
@@ -52,7 +58,7 @@ def image_hashes(images_map, images, *, _cache=None):
         h = hashlib.sha1()
         h.update(parent_hashable.encode('utf-8'))
         for chunk in hasher.visit(image):
-            h.update(chunk.encode('utf-8'))
+            h.update(chunk)
         hex_digest = _cache[image.name] = h.hexdigest()
         hashes.append(hex_digest)
     return hashes
