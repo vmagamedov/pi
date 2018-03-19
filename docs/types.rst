@@ -1,2 +1,0 @@
-.. automodule:: pi.types
-    :members:
