@@ -5,9 +5,8 @@ from functools import partial
 from .._requires import click
 from .._requires import jinja2
 
-from .._res import DUMB_INIT_LOCAL_PATH
-
 from ..run import run
+from ..home import ensure_dumb_init
 from ..types import CommandType, LocalPath, Mode
 from ..images import docker_image
 from ..environ import async_cmd
@@ -118,6 +117,7 @@ async def _callback(command, env, **params):
     )
     await _start_services(env, command)
     await ensure_network(env.client, env.network)
+    dumb_init_local_path = await ensure_dumb_init()
 
     di = docker_image(env.images, command.image)
     volumes = [LocalPath('.', '.', Mode.RW)]
@@ -125,7 +125,7 @@ async def _callback(command, env, **params):
     if isinstance(command.run, str):
         command_run = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
                        _render_template(command.run, params)]
-        volumes.append(LocalPath(DUMB_INIT_LOCAL_PATH,
+        volumes.append(LocalPath(dumb_init_local_path,
                                  DUMB_INIT_REMOTE_PATH))
 
     else:
