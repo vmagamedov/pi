@@ -22,12 +22,5 @@ requires:
 	# fix transitive import in Requests
 	echo "chardet = pi._requires.chardet" >> pi/_requires/requests/compat.py
 
-pi/_res/dumb-init-v1.2.1:
-	rm -f pi/_res/dumb-init*
-	wget -O ./pi/_res/dumb-init-v1.2.1 https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64
-	chmod +x ./pi/_res/dumb-init-v1.2.1
-
-all: requires pi/_res/dumb-init-v1.2.1
-
-release: all
+release: requires
 	python setup.py sdist

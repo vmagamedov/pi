@@ -1,3 +1,2 @@
-include pi/_res/dumb-init-*
 prune fixers
 prune tests

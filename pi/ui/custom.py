@@ -6,7 +6,6 @@ from .._requires import click
 from .._requires import jinja2
 
 from ..run import run
-from ..home import ensure_dumb_init
 from ..types import CommandType, LocalPath, Mode
 from ..images import docker_image
 from ..environ import async_cmd
@@ -16,9 +15,6 @@ from ..resolve import resolve
 from ..services import ensure_running
 
 from .common import ProxyCommand
-
-
-DUMB_INIT_REMOTE_PATH = '/.pi-dumb-init'
 
 
 def create_groups(groups_parts):
@@ -117,17 +113,12 @@ async def _callback(command, env, **params):
     )
     await _start_services(env, command)
     await ensure_network(env.client, env.network)
-    dumb_init_local_path = await ensure_dumb_init()
 
     di = docker_image(env.images, command.image)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
     if isinstance(command.run, str):
-        command_run = [DUMB_INIT_REMOTE_PATH, 'sh', '-c',
-                       _render_template(command.run, params)]
-        volumes.append(LocalPath(dumb_init_local_path,
-                                 DUMB_INIT_REMOTE_PATH))
-
+        command_run = ['sh', '-c', _render_template(command.run, params)]
     else:
         assert isinstance(command.run, list), type(command.run)
         assert not command.params
@@ -139,6 +130,7 @@ async def _callback(command, env, **params):
         exit_code = await run(
             env.client, fd, tty, di, command_run,
             loop=env.loop,
+            init=True,
             volumes=volumes,
             ports=command.ports,
             environ=command.environ,
