@@ -67,6 +67,6 @@ leaving any traces in your system:
 
 .. code-block:: shell
 
-    $ pip3 install pi-env
+    $ pip3 install pi-env==0.1.1rc2
 
 .. _YAML: http://yaml.org/spec/
