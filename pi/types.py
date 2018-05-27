@@ -1,13 +1,3 @@
-"""
-    Configuration
-    ~~~~~~~~~~~~~
-
-    `Pi` uses tagged values feature of the YAML_ format, which are mapped
-    directly into internal types of `Pi`. This kind of DSL is used to
-    describe project environment in a most simple way.
-
-    .. _YAML: http://yaml.org/spec/
-"""
 from enum import Enum
 from typing import Optional, Union, Any, Sequence, Mapping  # noqa
 from collections import OrderedDict
@@ -70,13 +60,6 @@ class MappingConstruct:
 
 @attr.s
 class Meta(MappingConstruct):
-    """``!Meta`` -- Project-specific settings
-
-    :param str namespace: used to namespace entities to avoid names collision
-        in different projects on the same host
-    :param str description: description of the project, showed in the "help" of
-        the project's CLI
-    """
     __tag__ = '!Meta'
 
     namespace = attr.ib(default=None)  # type: Optional[str]
