@@ -1,6 +1,5 @@
 import sys
 import os.path
-import sphinx_rtd_theme
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 extensions = ['sphinx.ext.autodoc']
@@ -9,11 +8,13 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 project = 'Pi'
-copyright = '2016, Vladimir Magamedov'
+copyright = '2018, Vladimir Magamedov'
 author = 'Vladimir Magamedov'
 
-version = 'dev'
-release = 'dev'
-
 html_theme = 'sphinx_rtd_theme'
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+html_static_path = ['_static']
+html_theme_options = {'display_version': False}
+
+
+def setup(app):
+    app.add_stylesheet('style.css')
