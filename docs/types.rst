@@ -42,7 +42,7 @@ not significant.
 
     .. code-block:: yaml
 
-        - !Image:
+        - !Image
           name: env
           repository: my.registry/project/name
           from: base
