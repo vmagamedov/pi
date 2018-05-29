@@ -1,6 +1,8 @@
 Command-line tool for managing containerized environments. Helps you build nice
 and unique CLI for your project, manage containers, images and services.
 
+Licensed under **BSD-3-Clause** license. See LICENSE.txt
+
 **Project CLI** means that you can create nested structure of commands, which
 will use containers (Docker) to run and services (e.g. PostgreSQL) to perform
 some complex tasks.
@@ -112,3 +114,9 @@ And of cause you can run your commands:
     $ pi test
     ...............................
     31 passed in 0.35 seconds
+
+Contributing
+~~~~~~~~~~~~
+
+Run ``pi test`` and ``pi lint`` in order to test and lint your changes before
+submitting your pull requests.
