@@ -1,2 +1,3 @@
+recursive-include pi *.pem
 prune fixers
 prune tests
