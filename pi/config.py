@@ -76,7 +76,9 @@ Loader.register_enum(types.Mode)
 
 def read_config():
     config = {}
-    if os.path.exists('pi.yaml'):
-        with codecs.open('pi.yaml', encoding='utf-8') as f:
+    path = os.path.abspath(os.environ.get('PI_PATH', '.'))
+    full_path = os.path.join(path, 'pi.yaml')
+    if os.path.exists(full_path):
+        with codecs.open(full_path, encoding='utf-8') as f:
             config = yaml.load(f.read(), Loader) or {}
-    return config
+    return config, full_path

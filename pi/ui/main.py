@@ -19,13 +19,14 @@ log = logging.getLogger(__name__)
 
 class UI(click.CommandCollection):
 
-    def __init__(self, config, meta, core, custom, **kwargs):
+    def __init__(self, config, config_path, *, meta, core, custom, **kwargs):
         params = [click.Option(['--debug'], is_flag=True,
                                help='Run in debug mode')]
         super().__init__(sources=(core + custom), callback=self.callback,
                          params=params, help=meta.description, **kwargs)
         self._meta = meta
         self._config = config
+        self._config_path = config_path
         self._core = core
         self._custom = custom
 
@@ -35,8 +36,8 @@ class UI(click.CommandCollection):
         ctx = click.get_current_context()
         images = get_images(self._config)
         services = get_services(self._config)
-        ctx.obj = Environ(self._meta, images, services)
-        log.debug('Environment configured')
+        ctx.obj = Environ(self._config_path, self._meta, images, services)
+        log.debug('Environment configured, config path: %r', self._config_path)
 
     def _list_core_commands(self, ctx):
         rv = set()
@@ -75,7 +76,7 @@ class UI(click.CommandCollection):
 
 
 def build_ui():
-    config = read_config()
+    config, config_path = read_config()
 
     meta = Meta()
     for obj in config:
@@ -86,4 +87,7 @@ def build_ui():
     services_cli = create_service_cli()
     commands_cli = create_commands_cli(config)
 
-    return UI(config, meta, [images_cli, services_cli], [commands_cli])
+    return UI(config, config_path,
+              meta=meta,
+              core=[images_cli, services_cli],
+              custom=[commands_cli])

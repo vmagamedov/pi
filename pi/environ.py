@@ -5,7 +5,8 @@ from .utils import cached_property, SequenceMap, async_func
 
 class Environ:
 
-    def __init__(self, meta, images, services):
+    def __init__(self, path, meta, images, services):
+        self.path = path
         self._meta = meta
         self.loop = asyncio.get_event_loop()
         self.images = SequenceMap(images, lambda i: i.name)
