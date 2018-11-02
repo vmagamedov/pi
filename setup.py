@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pi-env',
-    version='0.1.1rc3',
+    version='0.1.1',
     description='Command-line interface for your projects',
     author='Vladimir Magamedov',
     author_email='vladimir@magamedov.com',

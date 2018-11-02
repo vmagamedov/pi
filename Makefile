@@ -2,6 +2,7 @@ __default__:
 	@echo "Please specify a target to make"
 
 requires:
+	rm -rf ./*.egg-info
 	rm -rf pi/_requires/*
 	touch pi/_requires/__init__.py
 	pip3 install --disable-pip-version-check --no-deps -t pi/_requires -r requires.txt

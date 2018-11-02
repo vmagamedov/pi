@@ -25,7 +25,7 @@ leaving any traces in your system:
 
 .. code-block:: shell
 
-    $ pip3 install pi-env==0.1.1rc2
+    $ pip3 install pi-env
 
 Example
 ~~~~~~~
@@ -118,5 +118,5 @@ And of cause you can run your commands:
 Contributing
 ~~~~~~~~~~~~
 
-Run ``pi test`` and ``pi lint`` in order to test and lint your changes before
-submitting your pull requests.
+Run ``python -m pi test`` and ``python -m pi lint`` in order to test and lint
+your changes before submitting your pull requests.
