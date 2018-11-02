@@ -15,10 +15,10 @@ from .common import ExtGroup
 
 
 @click.command('start', help='Start service')
+@click.argument('name')
 @click.pass_obj
 @async_cmd
-async def service_start(env):
-    name = click.get_current_context().meta['image_name']
+async def service_start(env, name):
     service = env.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
@@ -53,10 +53,10 @@ async def service_start(env):
 
 
 @click.command('stop', help='Stop service')
+@click.argument('name')
 @click.pass_obj
 @async_cmd
-async def service_stop(env):
-    name = click.get_current_context().meta['image_name']
+async def service_stop(env, name):
     service = env.services.get(name, None)
     if service is None:
         click.echo('Unknown service name: {}'.format(name))
@@ -76,8 +76,10 @@ async def service_stop(env):
     click.echo('Service stopped')
 
 
+@click.command('status', help='Display services status')
+@click.pass_obj
 @async_cmd
-async def _service_status(env):
+async def service_status(env):
     containers = await env.client.containers(all=True)
 
     running = set()
@@ -124,30 +126,12 @@ def _service_ext_help(ctx, formatter):
             formatter.write_text('--- not defined ---')
 
 
-def _service_status_callback(ctx, param, value):
-    if value and not ctx.resilient_parsing:
-        _service_status(ctx.obj)
-        ctx.exit()
-
-
-def _service_callback(name):
-    click.get_current_context().meta['image_name'] = name
-
-
 def create_service_cli():
-    params = [
-        click.Option(['-s', '--status'], is_flag=True, is_eager=True,
-                     expose_value=False, callback=_service_status_callback,
-                     help='Display services status'),
-        click.Argument(['name']),
-    ]
-
-    service_group = ExtGroup('service', params=params,
-                             callback=_service_callback,
-                             help='Services status and management',
+    service_group = ExtGroup('service', help='Services status and management',
                              ext_help=_service_ext_help)
     service_group.add_command(service_start)
     service_group.add_command(service_stop)
+    service_group.add_command(service_status)
 
     cli = click.Group()
     cli.add_command(service_group)

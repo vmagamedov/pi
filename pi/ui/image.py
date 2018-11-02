@@ -15,17 +15,14 @@ from ..resolve import resolve
 
 from .._requires import click
 
-from .common import ProxyCommand, ExtGroup
-
-
-BUILD_NO_IMAGES = 'There are no images to build in the pi.yaml file'
+from .common import ExtGroup
 
 
 @click.command('build', help='Build image')
+@click.argument('name')
 @click.pass_obj
 @async_cmd
-async def image_build(env):
-    name = click.get_current_context().meta['image_name']
+async def image_build(env, name):
     image = env.images.get(name)
     failed = await resolve(
         env.client,
@@ -51,10 +48,10 @@ def _get_image(images_map, name):
 
 
 @click.command('pull', help='Pull image version')
+@click.argument('name')
 @click.pass_obj
 @async_cmd
-async def image_pull(env):
-    name = click.get_current_context().meta['image_name']
+async def image_pull(env, name):
     image = _get_image(env.images, name)
     success = await pull_image(env.client, image)
     if not success:
@@ -63,10 +60,10 @@ async def image_pull(env):
 
 
 @click.command('push', help='Push image version')
+@click.argument('name')
 @click.pass_obj
 @async_cmd
-async def image_push(env):
-    name = click.get_current_context().meta['image_name']
+async def image_push(env, name):
     image = _get_image(env.images, name)
     success = await push_image(env.client, image)
     if not success:
@@ -74,10 +71,12 @@ async def image_push(env):
         sys.exit(1)
 
 
+@click.command('run', help='Run command in container')
+@click.argument('name')
+@click.argument('args', nargs=-1, required=True)
 @click.pass_obj
 @async_cmd
-async def _image_run(env, args):
-    name = click.get_current_context().meta['image_name']
+async def image_run(env, name, args):
     image = _get_image(env.images, name)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
@@ -91,6 +90,8 @@ async def _image_run(env, args):
 _Tag = namedtuple('_Tag', 'value created')
 
 
+@click.command('gc', help='Remove old images')
+@click.argument('count', type=click.INT, default=1)
 @click.pass_obj
 @async_cmd
 async def image_gc(env, count):
@@ -126,7 +127,7 @@ async def image_gc(env, count):
         click.echo('Removed: {}'.format(image))
 
 
-async def get_images_info(env):
+async def _get_images_info(env):
     available = set()
     counts = Counter()
     sizes = {}
@@ -140,11 +141,13 @@ async def get_images_info(env):
     return available, counts, sizes
 
 
+@click.command('list', help='List images')
+@click.pass_obj
 @async_cmd
-async def _image_list(env):
+async def image_list(env):
     from .._requires.tabulate import tabulate
 
-    available, counts, sizes = await get_images_info(env)
+    available, counts, sizes = await _get_images_info(env)
     images = sorted(env.images, key=lambda i: i.name)
     versions = image_versions(env.images, images)
 
@@ -164,22 +167,6 @@ async def _image_list(env):
                                        'Size', 'Versions']))
 
 
-def _image_list_callback(ctx, param, value):
-    if value and not ctx.resilient_parsing:
-        _image_list(ctx.obj)
-        ctx.exit()
-
-
-def _image_gc_callback(ctx, param, value):
-    if value and not ctx.resilient_parsing:
-        image_gc(value)
-        ctx.exit()
-
-
-def _image_callback(name):
-    click.get_current_context().meta['image_name'] = name
-
-
 def _image_ext_help(ctx, formatter):
     if ctx.obj.images:
         with formatter.section('Images'):
@@ -192,28 +179,14 @@ def _image_ext_help(ctx, formatter):
 
 
 def create_images_cli():
-    params = [
-        click.Option(['-l', '--list'], is_flag=True, is_eager=True,
-                     expose_value=False, callback=_image_list_callback,
-                     help='Display services status'),
-        click.Option(['--gc'], type=click.INT, is_eager=True,
-                     expose_value=False, callback=_image_gc_callback,
-                     help='Delete old image versions'),
-        click.Argument(['name']),
-    ]
-
-    image_run = ProxyCommand('run', callback=_image_run,
-                             help='Run command in container')
-
-    image_group = ExtGroup('image', params=params,
-                           callback=_image_callback,
-                           help='Images creation and delivery',
+    image_group = ExtGroup('image', help='Images creation and delivery',
                            ext_help=_image_ext_help)
-
     image_group.add_command(image_run)
     image_group.add_command(image_pull)
     image_group.add_command(image_push)
     image_group.add_command(image_build)
+    image_group.add_command(image_list)
+    image_group.add_command(image_gc)
 
     cli = click.Group()
     cli.add_command(image_group)
