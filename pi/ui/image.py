@@ -47,6 +47,25 @@ def _get_image(images_map, name):
         return docker_image(images_map, image.name)
 
 
+@click.command('info', help='Show image info')
+@click.argument('name')
+@click.option('--repo-tag', is_flag=True)
+@click.pass_obj
+@async_cmd
+async def image_info(env, name, repo_tag):
+    try:
+        image = env.images.get(name)
+    except KeyError:
+        click.echo('Unknown image name: {}'.format(name))
+        sys.exit(1)
+    if repo_tag:
+        version, = image_versions(env.images, [image])
+        click.echo('{}:{}'.format(image.repository, version))
+    else:
+        click.echo('Nothing')
+        sys.exit(1)
+
+
 @click.command('pull', help='Pull image version')
 @click.argument('name')
 @click.pass_obj
@@ -187,6 +206,7 @@ def create_images_cli():
     image_group.add_command(image_build)
     image_group.add_command(image_list)
     image_group.add_command(image_gc)
+    image_group.add_command(image_info)
 
     cli = click.Group()
     cli.add_command(image_group)
