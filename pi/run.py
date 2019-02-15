@@ -202,7 +202,7 @@ async def run(client, stdin_fd, tty, image, command, *, loop, init=None,
                                  wait_exit=wait_exit)
         if exit_code is None:
             exit_code = await client.wait(c)
-        return exit_code
+        return exit_code['StatusCode']
 
     finally:
         await client.remove_container(c, v=True, force=True)

@@ -1,5 +1,10 @@
+.PHONY: requires.txt
+
 __default__:
 	@echo "Please specify a target to make"
+
+requires.txt:
+	pip-compile requires.in
 
 requires:
 	rm -rf ./*.egg-info

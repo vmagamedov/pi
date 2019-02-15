@@ -15,7 +15,7 @@ from .images import build as build_image
 log = logging.getLogger(__name__)
 
 
-@attr.s
+@attr.s(hash=True)
 class Dep:
     image = attr.ib()
     docker_image = attr.ib()

@@ -69,7 +69,7 @@ class Meta(MappingConstruct):
         return visitor.visit_meta(self)
 
 
-@attr.s
+@attr.s(hash=True)
 class DockerImage(ScalarConstruct):
     __tag__ = '!DockerImage'
 
@@ -103,7 +103,7 @@ def _convert_tasks(tasks):
     return [Task.from_config(d) for d in tasks]
 
 
-@attr.s
+@attr.s(hash=True)
 class Image(MappingConstruct):
     __tag__ = '!Image'
     __rename_to__ = ImmutableDict([
@@ -258,7 +258,7 @@ class ActionType:
         raise NotImplementedError
 
 
-@attr.s
+@attr.s(hash=True)
 class Download(ActionType, ScalarConstruct):
     __tag__ = '!Download'
 
@@ -268,7 +268,7 @@ class Download(ActionType, ScalarConstruct):
         return visitor.visit_download(self)
 
 
-@attr.s
+@attr.s(hash=True)
 class File(ActionType, ScalarConstruct):
     __tag__ = '!File'
 
@@ -278,7 +278,7 @@ class File(ActionType, ScalarConstruct):
         return visitor.visit_file(self)
 
 
-@attr.s
+@attr.s(hash=True)
 class Bundle(ActionType, ScalarConstruct):
     __tag__ = '!Bundle'
 
