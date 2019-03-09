@@ -134,3 +134,57 @@ async def terminate(task, *, loop, wait=1):
         await asyncio.wait_for(task, wait, loop=loop)
     except asyncio.CancelledError:
         pass
+
+
+if sys.version_info > (3, 7):
+    _current_task = asyncio.current_task
+else:
+    _current_task = asyncio.Task.current_task
+
+
+class Wrapper:
+    """Special wrapper for coroutines to wake them up in case of some error.
+
+    Example:
+
+    .. code-block:: python
+
+        w = Wrapper()
+
+        async def blocking_call():
+            with w:
+                await asyncio.sleep(10)
+
+        # and somewhere else:
+        w.cancel(NoNeedToWaitError('With explanation'))
+
+    """
+    _error = None
+
+    cancelled = None
+
+    def __init__(self):
+        self._tasks = set()
+
+    def __enter__(self):
+        if self._error is not None:
+            raise self._error
+
+        task = _current_task()
+        if task is None:
+            raise RuntimeError('Called not inside a task')
+
+        self._tasks.add(task)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        task = _current_task()
+        assert task
+        self._tasks.discard(task)
+        if self._error is not None:
+            raise self._error
+
+    def cancel(self, error):
+        self._error = error
+        for task in self._tasks:
+            task.cancel()
+        self.cancelled = True

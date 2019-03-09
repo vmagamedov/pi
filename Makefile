@@ -28,5 +28,7 @@ requires:
 	# fix transitive import in Requests
 	echo "chardet = pi._requires.chardet" >> pi/_requires/requests/compat.py
 
+	rm -rf pi/_requires/h11/tests
+
 release: requires
 	python setup.py sdist
