@@ -170,10 +170,10 @@ def mark_failed(deps_map, in_work, item):
     return failed
 
 
-async def resolve(client, images_map, services_map, obj, *, loop,
+async def resolve(client, docker, images_map, services_map, obj, *, loop,
                   pull=False, build=False, fail_fast=False):
     deps = ImagesCollector.collect(images_map, services_map, obj)
-    missing = await check(client, deps)
+    missing = await check(docker, deps)
     if not missing or not (pull or build):
         return missing
 

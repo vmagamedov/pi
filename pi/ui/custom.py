@@ -104,6 +104,7 @@ async def _start_services(env, command):
 async def _callback(command, env, **params):
     await resolve(
         env.client,
+        env.docker,
         env.images,
         env.services,
         command,

@@ -28,6 +28,12 @@ class Environ:
 
         return AsyncClient(loop=self.loop)
 
+    @cached_property
+    def docker(self):
+        from . import docker
+
+        return docker
+
 
 def async_cmd(func):
 

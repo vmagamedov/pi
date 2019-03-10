@@ -1,10 +1,31 @@
+import socket
 import asyncio
 
-from typing import cast
+from typing import cast, NamedTuple
 from contextlib import asynccontextmanager
 
 from .utils import Wrapper
 from ._requires import h11
+
+
+if hasattr(socket, 'TCP_NODELAY'):
+    _sock_type_mask = 0xf if hasattr(socket, 'SOCK_NONBLOCK') else 0xffffffff
+
+    def _set_nodelay(sock):
+        if (
+            sock.family in {socket.AF_INET, socket.AF_INET6}
+            and sock.type & _sock_type_mask == socket.SOCK_STREAM
+            and sock.proto == socket.IPPROTO_TCP
+        ):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+else:
+    def _set_nodelay(sock):
+        pass
+
+
+class Response(NamedTuple):
+    status_code: int
+    headers: dict
 
 
 class Stream:
@@ -19,6 +40,7 @@ class Stream:
         self._data = []
         self._data_size = 0
         self._data_waiter = asyncio.Event()
+        self._eof = False
 
         self._wrapper = Wrapper()
 
@@ -35,22 +57,31 @@ class Stream:
     async def recv_response(self):
         with self._wrapper:
             await self._response_waiter.wait()
-            return self._response
+            return Response(self._response.status_code,
+                            dict(self._response.headers))
 
-    async def recv_data(self, *, content_length=None):
+    async def recv_data(self, content_length):
         with self._wrapper:
             while True:
                 await self._data_waiter.wait()
-                if (
-                    content_length is not None
-                    and self._data_size < content_length
-                ):
+                if self._data_size < content_length:
                     self._data_waiter.clear()
                 else:
-                    data = b''.join(self._data)
-                    del self._data[:]
-                    self._data_size = 0
-                    return data
+                    assert self._eof
+                    assert self._data_size == content_length
+                    return b''.join(self._data)
+
+    async def recv_data_chunked(self):
+        with self._wrapper:
+            while True:
+                await self._data_waiter.wait()
+                for chunk in self._data:
+                    yield chunk
+                del self._data[:]
+                if self._eof:
+                    break
+                else:
+                    self._data_waiter.clear()
 
     async def end(self):
         data = self.connection.send(h11.EndOfMessage())
@@ -66,11 +97,12 @@ class Stream:
         self._data_waiter.set()
 
     def __end__(self):
-        self._data.append(b'')
+        self._eof = True
         self._data_waiter.set()
 
     def __terminated__(self):
-        self._wrapper.cancel(Exception('Connection closed'))
+        if not self._eof:
+            self._wrapper.cancel(Exception('Connection closed'))
 
 
 class HTTPProtocol(asyncio.Protocol):
@@ -79,6 +111,10 @@ class HTTPProtocol(asyncio.Protocol):
     stream: Stream = None
 
     def connection_made(self, transport):
+        sock = transport.get_extra_info('socket')
+        if sock is not None:
+            _set_nodelay(sock)
+
         self.connection = h11.Connection(h11.CLIENT)
         self.transport = transport
         self.stream = Stream(self.connection, self.transport)

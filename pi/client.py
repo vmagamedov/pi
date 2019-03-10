@@ -117,9 +117,6 @@ class AsyncClient:
         result = await self._loop.run_in_executor(None, wrapper)
         return result
 
-    def images(self, *args, **kwargs):
-        return self._exec(self._client.images, *args, **kwargs)
-
     def build(self, *args, stream=False, **kwargs):
         def proc():
             return self._exec(self._client.build, *args,

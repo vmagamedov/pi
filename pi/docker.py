@@ -1,39 +1,37 @@
-import asyncio
+import json
 
 from .http import connect
 
 
-class DockerClient:
+async def _request_json(method, path):
+    async with connect() as stream:
+        await stream.send_request(method, path, [
+            ('Host', 'localhost'),
+            ('Connection', 'close'),
+        ])
+        response = await stream.recv_response()
+        assert response.status_code == 200, response
 
-    async def _request_json(self):
-        pass
+        content_type = response.headers.get(b'content-type')
+        assert content_type == b'application/json', response
 
-    async def _request_stream(self):
-        pass
+        if b'content-length' in response.headers:
+            content_length = response.headers[b'content-length']
+            data = await stream.recv_data(content_length=int(content_length))
+        elif b'transfer-encoding' in response.headers:
+            transfer_encoding = response.headers[b'transfer-encoding']
+            assert transfer_encoding == b'chunked', response
+            chunks = [c async for c in stream.recv_data_chunked()]
+            data = b''.join(chunks)
+        else:
+            assert False, response
 
-    async def images(self):
-        async with connect() as stream:
-            await stream.send_request('GET', '/info', [
-                ('Host', 'localhost'),
-                ('Connection', 'close'),
-            ])
-            response = await stream.recv_response()
-            print(response.status_code)
-            print(response.headers)
-            data = []
-            while True:
-                chunk = await stream.recv_data()
-                if chunk:
-                    data.append(chunk)
-                else:
-                    break
-            print(b''.join(data))
-
-
-async def test():
-    client = DockerClient()
-    await client.images()
+        return json.loads(data.decode('utf-8'))
 
 
-if __name__ == '__main__':
-    asyncio.run(test())
+async def _get_json(path):
+    return await _request_json('GET', path)
+
+
+async def images():
+    return await _get_json('/images/json')

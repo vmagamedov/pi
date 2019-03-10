@@ -26,6 +26,7 @@ async def image_build(env, name):
     image = env.images.get(name)
     failed = await resolve(
         env.client,
+        env.docker,
         env.images,
         env.services,
         image,
@@ -124,7 +125,7 @@ async def image_gc(env, count):
     by_repo = defaultdict(list)
     to_delete = []
 
-    images = await env.client.images()
+    images = await env.docker.images()
     for image in images:
         repo_tags = set(image['RepoTags'])
         if repo_tags == {'<none>:<none>'}:
@@ -150,7 +151,7 @@ async def _get_images_info(env):
     available = set()
     counts = Counter()
     sizes = {}
-    images = await env.client.images()
+    images = await env.docker.images()
     for image in images:
         available.update(image['RepoTags'])
         for repo_tag in image['RepoTags']:
