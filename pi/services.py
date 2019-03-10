@@ -6,7 +6,7 @@ def service_label(namespace: str, service: Service):
     return '{}-{}'.format(namespace, service.name)
 
 
-async def ensure_running(client, namespace, services):
+async def ensure_running(client, docker, namespace, services):
     containers = await client.containers(all=True)
     for service in services:
         label = service_label(namespace, service)
@@ -16,7 +16,7 @@ async def ensure_running(client, namespace, services):
             raise RuntimeError('Service {} is not running'
                                .format(service.name))
         if container['State'] != 'running':
-            await client.start(container)
+            await docker.start(container['Id'])
 
 
 def get_volumes(volumes):

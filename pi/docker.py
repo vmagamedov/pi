@@ -2,7 +2,7 @@ import json
 
 from urllib.parse import urlencode
 
-from .http import connect, HTTPError
+from .http import connect
 
 
 async def _request_json(method, path):
@@ -39,6 +39,27 @@ async def images():
     return await _get_json('/images/json')
 
 
+async def start(id_, *, detach_keys=None):
+    assert isinstance(id_, str), id_
+    uri = '/containers/{id}/start'.format(id=id_)
+    params = {}
+    if detach_keys is not None:
+        params['detachKeys'] = detach_keys
+    if params:
+        uri += '?' + urlencode(params)
+    async with connect() as stream:
+        await stream.send_request('POST', uri, [
+            ('Host', 'localhost'),
+        ])
+        response = await stream.recv_response()
+        if response.status_code == 204:
+            pass
+        elif response.status_code == 304:
+            pass
+        else:
+            raise response.error()
+
+
 async def remove_container(id_, *, v=False, force=False, link=False):
     assert isinstance(id_, str), id_
     uri = '/containers/{id}'.format(id=id_)
@@ -56,5 +77,7 @@ async def remove_container(id_, *, v=False, force=False, link=False):
             ('Host', 'localhost'),
         ])
         response = await stream.recv_response()
-        if response.status_code != 204:
-            raise HTTPError(response.status_code)
+        if response.status_code == 204:
+            pass
+        else:
+            raise response.error()

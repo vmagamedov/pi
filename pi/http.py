@@ -30,6 +30,14 @@ class HTTPError(Exception):
 class Response(NamedTuple):
     status_code: int
     headers: dict
+    reason: bytes
+
+    def error(self):
+        try:
+            reason = self.reason.decode('ascii')
+        except UnicodeDecodeError:
+            reason = repr(self.reason)
+        raise HTTPError(reason)
 
 
 class Stream:
@@ -62,7 +70,8 @@ class Stream:
         with self._wrapper:
             await self._response_waiter.wait()
             return Response(self._response.status_code,
-                            dict(self._response.headers))
+                            dict(self._response.headers),
+                            self._response.reason)
 
     async def recv_data(self, content_length):
         with self._wrapper:

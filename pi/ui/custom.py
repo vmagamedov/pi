@@ -98,7 +98,7 @@ def _required_services(env, obj, *, _seen=None, _all=None):
 
 async def _start_services(env, command):
     services = list(_required_services(env, command))
-    await ensure_running(env.client, env.namespace, services)
+    await ensure_running(env.client, env.docker, env.namespace, services)
 
 
 async def _callback(command, env, **params):

@@ -9,6 +9,7 @@ from asyncio import TimeoutError as AIOTimeoutError, wait_for
 
 from ._requires import click
 
+from .http import HTTPError
 from .utils import terminate
 from .client import APIError, NotFound
 
@@ -136,9 +137,9 @@ async def start(client, docker, image, command, *, init=None, tty=True,
         click.echo(e.explanation)
         return
     try:
-        await client.start(c)
-    except APIError as e:
-        click.echo(e.explanation)
+        await docker.start(c['Id'])
+    except HTTPError as e:
+        click.echo(e)
         await docker.remove_container(c['Id'], v=True, force=True)
     else:
         return c

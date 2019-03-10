@@ -31,7 +31,7 @@ async def service_start(env, name):
         if container['State'] == 'running':
             click.echo('Service is already running')
         elif container['State'] == 'exited':
-            await env.client.start(container)
+            await env.docker.start(container['Id'])
             click.echo('Started previously stopped service')
         else:
             raise NotImplementedError(container['State'])

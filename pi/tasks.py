@@ -283,7 +283,7 @@ async def build(client, docker, images_map, image, *, loop):
         from_.name, '/bin/sh', detach=True, tty=True,
     )
     try:
-        await client.start(c)
+        await docker.start(c['Id'])
         exit_code = await _exec(client, c, ['mkdir', '/.pi'])
         if exit_code:
             return False
