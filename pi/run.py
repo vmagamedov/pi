@@ -92,7 +92,7 @@ def _port_binds(ports):
             for e in ports}
 
 
-async def start(client, image, command, *, init=None, tty=True,
+async def start(client, docker, image, command, *, init=None, tty=True,
                 entrypoint=None, volumes=None, ports=None, environ=None,
                 work_dir=None, network=None, network_alias=None, label=None):
     volumes = volumes or []
@@ -139,7 +139,7 @@ async def start(client, image, command, *, init=None, tty=True,
         await client.start(c)
     except APIError as e:
         click.echo(e.explanation)
-        await client.remove_container(c, v=True, force=True)
+        await docker.remove_container(c['Id'], v=True, force=True)
     else:
         return c
 
@@ -188,10 +188,11 @@ async def attach(client, container, stdin_fd, *, loop, wait_exit=10):
         return exit_code
 
 
-async def run(client, stdin_fd, tty, image, command, *, loop, init=None,
+async def run(client, docker, stdin_fd, tty, image, command, *, loop, init=None,
               volumes=None, ports=None, environ=None, work_dir=None,
               network=None, network_alias=None, wait_exit=3):
-    c = await start(client, image, command, init=init, tty=tty, volumes=volumes,
+    c = await start(client, docker, image, command, init=init, tty=tty,
+                    volumes=volumes,
                     ports=ports, environ=environ, work_dir=work_dir,
                     network=network, network_alias=network_alias)
     if c is None:
@@ -205,4 +206,4 @@ async def run(client, stdin_fd, tty, image, command, *, loop, init=None,
         return exit_code['StatusCode']
 
     finally:
-        await client.remove_container(c, v=True, force=True)
+        await docker.remove_container(c['Id'], v=True, force=True)

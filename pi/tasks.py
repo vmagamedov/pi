@@ -262,7 +262,7 @@ async def _exec(client, container, cmd):
     return exit_code
 
 
-async def build(client, images_map, image, *, loop):
+async def build(client, docker, images_map, image, *, loop):
     version, = image_versions(images_map, [image])
     from_ = docker_image(images_map, image.from_)
 
@@ -336,4 +336,4 @@ async def build(client, images_map, image, *, loop):
         process_pool.shutdown()
         for state in states.values():
             state.result.close()
-        await client.remove_container(c, v=True, force=True)
+        await docker.remove_container(c['Id'], v=True, force=True)

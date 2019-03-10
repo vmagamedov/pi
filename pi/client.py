@@ -129,9 +129,6 @@ class AsyncClient:
     def start(self, *args, **kwargs):
         return self._exec(self._client.start, *args, **kwargs)
 
-    def remove_container(self, *args, **kwargs):
-        return self._exec(self._client.remove_container, *args, **kwargs)
-
     def put_archive(self, *args, **kwargs):
         return self._exec(self._client.put_archive, *args, **kwargs)
 

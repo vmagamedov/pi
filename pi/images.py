@@ -156,8 +156,8 @@ async def push(client, docker_image):
         return success
 
 
-async def build(client, images_map, image, *, loop):
+async def build(client, docker, images_map, image, *, loop):
     from .tasks import build as build_tasks
 
-    result = await build_tasks(client, images_map, image, loop=loop)
+    result = await build_tasks(client, docker, images_map, image, loop=loop)
     return result

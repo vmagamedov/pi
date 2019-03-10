@@ -92,11 +92,11 @@ async def pull_worker(client, queue, result_queue):
             await result_queue.put((status, dep))
 
 
-async def build_worker(client, images_map, queue, result_queue, *, loop):
+async def build_worker(client, docker, images_map, queue, result_queue, *, loop):
     while True:
         dep = await queue.get()
         try:
-            result = await build_image(client, images_map, dep.image,
+            result = await build_image(client, docker, images_map, dep.image,
                                        loop=loop)
         except Exception:
             log.exception('Failed to build image')
@@ -191,7 +191,7 @@ async def resolve(client, docker, images_map, services_map, obj, *, loop,
         pull_worker(client, pull_queue, result_queue)
     )
     builder_task = loop.create_task(
-        build_worker(client, images_map, build_queue, result_queue, loop=loop)
+        build_worker(client, docker, images_map, build_queue, result_queue, loop=loop)
     )
     try:
         while deps_map or in_work:

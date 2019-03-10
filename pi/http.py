@@ -23,6 +23,10 @@ else:
         pass
 
 
+class HTTPError(Exception):
+    pass
+
+
 class Response(NamedTuple):
     status_code: int
     headers: dict

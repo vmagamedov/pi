@@ -41,7 +41,7 @@ async def service_start(env, name):
         di = docker_image(env, service.image)
         await ensure_network(env.client, env.network)
 
-        await start(env.client, di, args,
+        await start(env.client, env.docker, di, args,
                     entrypoint=exec_,
                     volumes=get_volumes(service.volumes),
                     ports=service.ports,
@@ -72,7 +72,7 @@ async def service_stop(env, name):
     for container in containers:
         if container['State'] == 'running':
             await env.client.stop(container, timeout=3)
-        await env.client.remove_container(container, v=True, force=True)
+        await env.docker.remove_container(container['Id'], v=True, force=True)
     click.echo('Service stopped')
 
 

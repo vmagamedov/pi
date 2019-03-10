@@ -1,6 +1,8 @@
 import json
 
-from .http import connect
+from urllib.parse import urlencode
+
+from .http import connect, HTTPError
 
 
 async def _request_json(method, path):
@@ -35,3 +37,24 @@ async def _get_json(path):
 
 async def images():
     return await _get_json('/images/json')
+
+
+async def remove_container(id_, *, v=False, force=False, link=False):
+    assert isinstance(id_, str), id_
+    uri = '/containers/{id}'.format(id=id_)
+    params = {}
+    if v:
+        params['v'] = 'true'
+    if force:
+        params['force'] = 'true'
+    if link:
+        params['link'] = 'true'
+    if params:
+        uri += '?' + urlencode(params)
+    async with connect() as stream:
+        await stream.send_request('DELETE', uri, [
+            ('Host', 'localhost'),
+        ])
+        response = await stream.recv_response()
+        if response.status_code != 204:
+            raise HTTPError(response.status_code)
