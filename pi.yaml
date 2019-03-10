@@ -3,39 +3,29 @@
     Project command-line interface
 
 - !Image
-  name: test-py35
-  from: !DockerImage python:3.5.3-alpine
-  repository: localhost/pi/test-py35
+  name: test-py36
+  from: !DockerImage python:3.6-alpine
+  repository: localhost/pi/test-py36
   tasks:
-  - run: >
-      pip3 install --no-cache-dir --disable-pip-version-check
-      {{packages|join(" ")}}
-    packages:
-    - aiohttp==1.0.5
-    - pytest==3.0.5
-    - pytest-asyncio==0.5.0
-    - flake8==3.2.1
+  - run: pip3 install --no-deps --no-cache-dir --disable-pip-version-check -r {{req}}
+    req: !File "tests/requirements.txt"
 
 - !Image
   name: docs
-  from: !DockerImage python:3.5.3-alpine
+  from: !DockerImage python:3.6-alpine
   repository: localhost/pi/docs
   tasks:
-  - run: >
-      pip3 install --no-cache-dir --disable-pip-version-check
-      {{packages|join(" ")}}
-    packages:
-    - sphinx==1.4.8
-    - sphinx_rtd_theme==0.1.10a0
+  - run: pip3 install --no-deps --no-cache-dir --disable-pip-version-check -r {{req}}
+    req: !File "docs/requirements.txt"
 
 - !Command
   name: test
-  image: test-py35
+  image: test-py36
   run: py.test
 
 - !Command
   name: lint
-  image: test-py35
+  image: test-py36
   run: flake8 && echo OK
 
 - !Command
