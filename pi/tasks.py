@@ -336,4 +336,5 @@ async def build(client, docker, images_map, image, *, loop):
         process_pool.shutdown()
         for state in states.values():
             state.result.close()
-        await docker.remove_container(c['Id'], v=True, force=True)
+        await docker.remove_container(c['Id'],
+                                      params={'v': 'true', 'force': 'true'})

@@ -39,12 +39,9 @@ async def images():
     return await _get_json('/images/json')
 
 
-async def start(id_, *, detach_keys=None):
+async def start(id_, *, params=None):
     assert isinstance(id_, str), id_
     uri = '/containers/{id}/start'.format(id=id_)
-    params = {}
-    if detach_keys is not None:
-        params['detachKeys'] = detach_keys
     if params:
         uri += '?' + urlencode(params)
     async with connect() as stream:
@@ -60,16 +57,9 @@ async def start(id_, *, detach_keys=None):
             raise response.error()
 
 
-async def remove_container(id_, *, v=False, force=False, link=False):
+async def remove_container(id_, *, params=None):
     assert isinstance(id_, str), id_
     uri = '/containers/{id}'.format(id=id_)
-    params = {}
-    if v:
-        params['v'] = 'true'
-    if force:
-        params['force'] = 'true'
-    if link:
-        params['link'] = 'true'
     if params:
         uri += '?' + urlencode(params)
     async with connect() as stream:

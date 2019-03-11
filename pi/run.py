@@ -140,7 +140,8 @@ async def start(client, docker, image, command, *, init=None, tty=True,
         await docker.start(c['Id'])
     except HTTPError as e:
         click.echo(e)
-        await docker.remove_container(c['Id'], v=True, force=True)
+        await docker.remove_container(c['Id'],
+                                      params={'v': 'true', 'force': 'true'})
     else:
         return c
 
@@ -207,4 +208,5 @@ async def run(client, docker, stdin_fd, tty, image, command, *, loop, init=None,
         return exit_code['StatusCode']
 
     finally:
-        await docker.remove_container(c['Id'], v=True, force=True)
+        await docker.remove_container(c['Id'],
+                                      params={'v': 'true', 'force': 'true'})

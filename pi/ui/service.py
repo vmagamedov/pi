@@ -72,7 +72,8 @@ async def service_stop(env, name):
     for container in containers:
         if container['State'] == 'running':
             await env.client.stop(container, timeout=3)
-        await env.docker.remove_container(container['Id'], v=True, force=True)
+        await env.docker.remove_container(container['Id'],
+                                          params={'v': 'true', 'force': 'true'})
     click.echo('Service stopped')
 
 
