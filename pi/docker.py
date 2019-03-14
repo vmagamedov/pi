@@ -5,6 +5,24 @@ from urllib.parse import urlencode
 from .http import connect
 
 
+async def _recv_json(stream, response):
+    content_type = response.headers.get(b'content-type')
+    assert content_type == b'application/json', response
+
+    if b'content-length' in response.headers:
+        content_length = response.headers[b'content-length']
+        data = await stream.recv_data(content_length=int(content_length))
+    elif b'transfer-encoding' in response.headers:
+        transfer_encoding = response.headers[b'transfer-encoding']
+        assert transfer_encoding == b'chunked', response
+        chunks = [c async for c in stream.recv_data_chunked()]
+        data = b''.join(chunks)
+    else:
+        assert False, response
+
+    return json.loads(data.decode('utf-8'))
+
+
 async def _request_json(method, path):
     async with connect() as stream:
         await stream.send_request(method, path, [
@@ -13,22 +31,7 @@ async def _request_json(method, path):
         ])
         response = await stream.recv_response()
         assert response.status_code == 200, response
-
-        content_type = response.headers.get(b'content-type')
-        assert content_type == b'application/json', response
-
-        if b'content-length' in response.headers:
-            content_length = response.headers[b'content-length']
-            data = await stream.recv_data(content_length=int(content_length))
-        elif b'transfer-encoding' in response.headers:
-            transfer_encoding = response.headers[b'transfer-encoding']
-            assert transfer_encoding == b'chunked', response
-            chunks = [c async for c in stream.recv_data_chunked()]
-            data = b''.join(chunks)
-        else:
-            assert False, response
-
-        return json.loads(data.decode('utf-8'))
+        return await _recv_json(stream, response)
 
 
 async def _get_json(path):
@@ -37,6 +40,25 @@ async def _get_json(path):
 
 async def images():
     return await _get_json('/images/json')
+
+
+async def create_container(spec, *, params=None):
+    uri = '/containers/create'
+    if params:
+        uri += '?' + urlencode(params)
+    async with connect() as stream:
+        data = json.dumps(spec).encode('utf-8')
+        await stream.send_request('POST', uri, [
+            ('Host', 'localhost'),
+            ('Content-Type', 'application/json'),
+            ('Content-Length', str(len(data))),
+        ], end_stream=False)
+        await stream.send_data(data)
+        response = await stream.recv_response()
+        if response.status_code == 201:
+            return await _recv_json(stream, response)
+        else:
+            raise response.error()
 
 
 async def start(id_, *, params=None):

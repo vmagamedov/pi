@@ -10,8 +10,8 @@ from asyncio import TimeoutError as AIOTimeoutError, wait_for
 from ._requires import click
 
 from .http import HTTPError
-from .utils import terminate
-from .client import APIError, NotFound
+from .utils import terminate, sh_to_list
+from .client import NotFound
 
 
 log = logging.getLogger(__name__)
@@ -87,61 +87,80 @@ class _VolumeBinds:
         return obj.name, {'bind': to, 'mode': self.visit(obj.mode)}
 
 
+def _volumes(volumes):
+    return {path: {} for path in _VolumeBinds.translate_volumes(volumes)}
+
+
+def _volume_binds(volumes):
+    binds = _VolumeBinds.translate_binds(volumes)
+    return ['{}:{}:{}'.format(k, v['bind'], v['mode'])
+            for k, v in binds.items()]
+
+
+def _exposed_ports(ports):
+    return {'{}/{}'.format(p.port, p.proto): {} for p in ports}
+
+
 def _port_binds(ports):
     return {'{}/{}'.format(e.port, e.proto): {'HostPort': e.as_,
                                               'HostIp': e.addr}
             for e in ports}
 
 
-async def start(client, docker, image, command, *, init=None, tty=True,
+async def start(docker, image, command, *, init=None, tty=True,
                 entrypoint=None, volumes=None, ports=None, environ=None,
                 work_dir=None, network=None, network_alias=None, label=None):
-    volumes = volumes or []
-    container_volumes = _VolumeBinds.translate_volumes(volumes)
-    container_volume_binds = _VolumeBinds.translate_binds(volumes)
+    spec = {
+        'Image': image.name,
+        'Cmd': sh_to_list(command),
+        'OpenStdin': True,
+        'Tty': tty,
+    }
+    if ports:
+        spec['ExposedPorts'] = _exposed_ports(ports)
+    if environ:
+        spec['Env'] = ['{}={}'.format(k, v) for k, v in (environ.items() or ())]
+    if volumes:
+        spec['Volumes'] = _volumes(volumes)
+    if entrypoint is not None:
+        spec['Entrypoint'] = entrypoint
+    if work_dir:
+        spec['WorkingDir'] = os.path.abspath(work_dir)
+    if label:
+        spec['Labels'] = {label: ''}
 
-    ports = ports or []
-    container_ports = [(e.port, e.proto) for e in ports]
-    container_port_binds = _port_binds(ports)
+    host_config = {}
+    if init:
+        host_config['Init'] = True
+    if volumes:
+        host_config['Binds'] = _volume_binds(volumes)
+    if ports:
+        host_config['PortBindings'] = _port_binds(ports)
+    if network:
+        host_config['NetworkMode'] = network
+    if host_config:
+        spec['HostConfig'] = host_config
 
-    work_dir = os.path.abspath(work_dir) if work_dir is not None else None
-    labels = [label] if label is not None else []
-
-    host_config = client.create_host_config(
-        init=init,
-        binds=container_volume_binds,
-        port_bindings=container_port_binds,
-        network_mode=network,
-    )
-    networking_config = None
-    if network_alias is not None:
-        networking_config = client.create_networking_config(endpoints_config={
+    networking_config = {}
+    if network and network_alias:
+        networking_config['EndpointsConfig'] = {
             network: {'Aliases': [network_alias]},
-        })
+        }
+    if networking_config:
+        spec['NetworkingConfig'] = networking_config
+
     try:
-        c = await client.create_container(
-            image=image.name,
-            command=command,
-            stdin_open=True,
-            tty=tty,
-            ports=container_ports,
-            environment=environ,
-            volumes=container_volumes,
-            entrypoint=entrypoint,
-            working_dir=work_dir,
-            labels=labels,
-            host_config=host_config,
-            networking_config=networking_config,
-        )
-    except APIError as e:
-        click.echo(e.explanation)
+        c = await docker.create_container(spec)
+    except HTTPError as e:
+        click.echo(e)
         return
     try:
         await docker.start(c['Id'])
     except HTTPError as e:
         click.echo(e)
-        await docker.remove_container(c['Id'],
-                                      params={'v': 'true', 'force': 'true'})
+        await docker.remove_container(c['Id'], params={
+            'v': 'true', 'force': 'true',
+        })
     else:
         return c
 
@@ -193,7 +212,7 @@ async def attach(client, container, stdin_fd, *, loop, wait_exit=10):
 async def run(client, docker, stdin_fd, tty, image, command, *, loop, init=None,
               volumes=None, ports=None, environ=None, work_dir=None,
               network=None, network_alias=None, wait_exit=3):
-    c = await start(client, docker, image, command, init=init, tty=tty,
+    c = await start(docker, image, command, init=init, tty=tty,
                     volumes=volumes,
                     ports=ports, environ=environ, work_dir=work_dir,
                     network=network, network_alias=network_alias)

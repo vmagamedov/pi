@@ -64,7 +64,9 @@ class Stream:
             await self.end()
 
     async def send_data(self, data):
-        pass
+        data = self.connection.send(h11.Data(data=data))
+        self.transport.write(data)
+        await self.end()
 
     async def recv_response(self):
         with self._wrapper:

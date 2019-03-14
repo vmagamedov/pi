@@ -106,12 +106,6 @@ class AsyncClient:
         self._client = _Client(version='auto', loop=loop, **kwargs_from_env())
         self._loop = loop
 
-    def create_host_config(self, *args, **kwargs):
-        return self._client.create_host_config(*args, **kwargs)
-
-    def create_networking_config(self, *args, **kwargs):
-        return self._client.create_networking_config(*args, **kwargs)
-
     async def _exec(self, func, *args, **kwargs):
         wrapper = partial(func, *args, **kwargs)
         result = await self._loop.run_in_executor(None, wrapper)
@@ -122,9 +116,6 @@ class AsyncClient:
             return self._exec(self._client.build, *args,
                               stream=stream, **kwargs)
         return _AsyncContextManagerAdapter(proc) if stream else proc()
-
-    def create_container(self, *args, **kwargs):
-        return self._exec(self._client.create_container, *args, **kwargs)
 
     def put_archive(self, *args, **kwargs):
         return self._exec(self._client.put_archive, *args, **kwargs)

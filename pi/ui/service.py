@@ -41,7 +41,7 @@ async def service_start(env, name):
         di = docker_image(env, service.image)
         await ensure_network(env.client, env.network)
 
-        await start(env.client, env.docker, di, args,
+        await start(env.docker, di, args,
                     entrypoint=exec_,
                     volumes=get_volumes(service.volumes),
                     ports=service.ports,

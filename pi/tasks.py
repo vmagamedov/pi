@@ -279,9 +279,13 @@ async def build(client, docker, images_map, image, *, loop):
     io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
     cpu_pool_task = loop.create_task(pool(cpu_queue, cpu_executor, loop=loop))
 
-    c = await client.create_container(
-        from_.name, '/bin/sh', detach=True, tty=True,
-    )
+    c = await docker.create_container({
+        'Image': from_.name,
+        'Cmd': '/bin/sh',
+        'Tty': True,
+        'AttachStdout': False,
+        'AttachStderr': False,
+    })
     try:
         await docker.start(c['Id'])
         exit_code = await _exec(client, c, ['mkdir', '/.pi'])
