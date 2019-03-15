@@ -61,6 +61,22 @@ async def create_container(spec, *, params=None):
             raise response.error()
 
 
+async def resize(id_, *, params=None):
+    assert isinstance(id_, str), id_
+    uri = '/containers/{id}/resize'.format(id=id_)
+    if params:
+        uri += '?' + urlencode(params)
+    async with connect() as stream:
+        await stream.send_request('POST', uri, [
+            ('Host', 'localhost'),
+        ])
+        response = await stream.recv_response()
+        if response.status_code == 200:
+            pass
+        else:
+            raise response.error()
+
+
 async def start(id_, *, params=None):
     assert isinstance(id_, str), id_
     uri = '/containers/{id}/start'.format(id=id_)

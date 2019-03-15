@@ -11,7 +11,6 @@ from ._requires import click
 
 from .http import HTTPError
 from .utils import terminate, sh_to_list
-from .client import NotFound
 
 
 log = logging.getLogger(__name__)
@@ -155,11 +154,12 @@ async def start(docker, image, command, *, init=None, tty=True,
         return c
 
 
-async def resize(client, container):
+async def resize(docker, id_):
+    # TODO: maybe set also $LINES and $COLUMNS variables, add SIGWINCH handler
     width, height = click.get_terminal_size()
     try:
-        await client.resize(container, height, width)
-    except NotFound as e:
+        await docker.resize(id_, params={'w': str(width), 'h': str(height)})
+    except HTTPError as e:
         log.debug('Failed to resize terminal: %s', e)
 
 
@@ -209,7 +209,7 @@ async def run(client, docker, stdin_fd, tty, image, command, *, loop, init=None,
     if c is None:
         return
     try:
-        await resize(client, c)
+        await resize(docker, c['Id'])
         exit_code = await attach(client, c, stdin_fd, loop=loop,
                                  wait_exit=wait_exit)
         if exit_code is None:
