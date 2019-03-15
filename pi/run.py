@@ -56,22 +56,13 @@ async def socket_writer(sock, in_queue, *, loop):
 
 class _VolumeBinds:
 
-    @classmethod
-    def translate_binds(cls, volumes):
-        self = cls()
-        return dict(self.visit(vol) for vol in volumes)
-
-    @classmethod
-    def translate_volumes(cls, volumes):
-        return [os.path.abspath(vol.to) for vol in volumes]
-
     def visit(self, obj):
         return obj.accept(self)
 
-    def visit_RO(self, obj):
+    def visit_RO(self, _):
         return 'ro'
 
-    def visit_RW(self, obj):
+    def visit_RW(self, _):
         return 'rw'
 
     def visit_localpath(self, obj):
@@ -80,21 +71,20 @@ class _VolumeBinds:
         # FIXME: implement proper errors reporting
         assert os.path.exists(from_),\
             'Local path does not exists: {}'.format(from_)
-        return from_, {'bind': to, 'mode': self.visit(obj.mode)}
+        return '{}:{}:{}'.format(from_, to, self.visit(obj.mode))
 
     def visit_namedvolume(self, obj):
         to = os.path.abspath(obj.to)
-        return obj.name, {'bind': to, 'mode': self.visit(obj.mode)}
+        return '{}:{}:{}'.format(obj.name, to, self.visit(obj.mode))
 
 
 def _volumes(volumes):
-    return {path: {} for path in _VolumeBinds.translate_volumes(volumes)}
+    return {os.path.abspath(vol.to): {} for vol in volumes}
 
 
 def _volume_binds(volumes):
-    binds = _VolumeBinds.translate_binds(volumes)
-    return ['{}:{}:{}'.format(k, v['bind'], v['mode'])
-            for k, v in binds.items()]
+    transformer = _VolumeBinds()
+    return [transformer.visit(v) for v in volumes]
 
 
 def _exposed_ports(ports):
