@@ -100,8 +100,8 @@ async def image_run(env, name, args):
     image = _get_image(env.images, name)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
-    with config_tty() as (fd, tty):
-        exit_code = await run(env.client, env.docker, fd, tty, image, args,
+    with config_tty() as tty:
+        exit_code = await run(env.client, env.docker, tty, image, args,
                               loop=env.loop, volumes=volumes,
                               work_dir='.')
         sys.exit(exit_code)

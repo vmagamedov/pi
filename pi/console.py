@@ -31,7 +31,6 @@ DATE_FORMAT = '%H:%M:%S'
 
 @contextmanager
 def config_tty():
-    fd = sys.stdin.fileno()
     if sys.stdin.isatty() and sys.stdout.isatty():
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
@@ -41,11 +40,11 @@ def config_tty():
             fixed_mode = termios.tcgetattr(fd)
             fixed_mode[tty.OFLAG] |= tty.OPOST
             termios.tcsetattr(fd, termios.TCSAFLUSH, fixed_mode)
-            yield fd, True
+            yield True
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
     else:
-        yield fd, False
+        yield False
 
 
 def configure_logging(debug):

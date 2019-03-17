@@ -127,9 +127,9 @@ async def _callback(command, env, **params):
 
     volumes.extend(command.volumes or [])
 
-    with config_tty() as (fd, tty):
+    with config_tty() as tty:
         exit_code = await run(
-            env.client, env.docker, fd, tty, di, command_run,
+            env.client, env.docker, tty, di, command_run,
             loop=env.loop,
             init=True,
             volumes=volumes,

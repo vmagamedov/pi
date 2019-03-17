@@ -150,14 +150,6 @@ class AsyncClient:
     def kill(self, *args, **kwargs):
         return self._exec(self._client.kill, *args, **kwargs)
 
-    def resize(self, *args, **kwargs):
-        return self._exec(self._client.resize, *args, **kwargs)
-
-    def attach_socket(self, *args, **kwargs):
-        def proc():
-            return self._exec(self._client.attach_socket, *args, **kwargs)
-        return _AsyncContextManagerAdapter(proc)
-
     def wait(self, *args, **kwargs):
         return self._exec(self._client.wait, *args, **kwargs)
 

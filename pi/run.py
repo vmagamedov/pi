@@ -1,56 +1,15 @@
 import sys
-import signal
-import socket
 import os.path
 import logging
-
-from asyncio import Queue, CancelledError, Event
-from asyncio import TimeoutError as AIOTimeoutError, wait_for
+import asyncio
 
 from ._requires import click
 
 from .http import HTTPError
-from .utils import terminate, sh_to_list
+from .utils import sh_to_list
 
 
 log = logging.getLogger(__name__)
-
-
-async def stdin_reader(fd, in_queue, *, loop):
-    eof = Event(loop=loop)
-
-    def cb():
-        data = os.read(fd, 32)
-        if not data:
-            eof.set()
-        in_queue.put_nowait(data)
-
-    loop.add_reader(fd, cb)
-    try:
-        await eof.wait()
-    finally:
-        loop.remove_reader(fd)
-
-
-async def stdout_writer(out_queue):
-    while True:
-        data = await out_queue.get()
-        sys.stdout.write(data.decode('utf-8', 'replace'))
-        sys.stdout.flush()
-
-
-async def socket_reader(sock, out_queue, *, loop):
-    while True:
-        data = await loop.sock_recv(sock, 4096)
-        if not data:
-            break
-        await out_queue.put(data)
-
-
-async def socket_writer(sock, in_queue, *, loop):
-    while True:
-        data = await in_queue.get()
-        await loop.sock_sendall(sock, data)
 
 
 class _VolumeBinds:
@@ -163,45 +122,48 @@ async def resize(docker, id_):
         log.debug('Failed to resize terminal: %s', e)
 
 
-async def attach(client, container, stdin_fd, *, loop, wait_exit=10):
-    params = {'logs': 1, 'stdin': 1, 'stdout': 1, 'stderr': 1, 'stream': 1}
-    async with client.attach_socket(container, params) as sock_io:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM,
-                             fileno=sock_io.fileno())
-        sock.setblocking(False)
+class StdIOProtocol(asyncio.Protocol):
+    transport: asyncio.Transport
 
-        container_input = Queue(loop=loop)
-        socket_writer_task = loop.create_task(
-            socket_writer(sock, container_input, loop=loop))
-        stdin_reader_task = loop.create_task(
-            stdin_reader(stdin_fd, container_input, loop=loop))
+    def __init__(self, http_proto=None):
+        self.http_proto = http_proto
 
-        container_output = Queue(loop=loop)
-        stdout_writer_task = loop.create_task(
-            stdout_writer(container_output))
-        socket_reader_task = loop.create_task(
-            socket_reader(sock, container_output, loop=loop))
+    def connection_made(self, transport):
+        self.transport = transport
 
-        exit_code = None
-        try:
-            exit_code = await client.wait(container)
-        except CancelledError:
-            await client.kill(container, signal.SIGINT)
-            try:
-                await wait_for(socket_reader_task, wait_exit, loop=loop)
-            except AIOTimeoutError:
-                await client.kill(container, signal.SIGKILL)
+    def pause_writing(self):
+        self.http_proto.transport.pause_reading()
 
-        await terminate(stdout_writer_task, loop=loop)
-        await terminate(stdin_reader_task, loop=loop)
-        await terminate(socket_reader_task, loop=loop)
-        await terminate(socket_writer_task, loop=loop)
-        return exit_code
+    def resume_writing(self):
+        self.http_proto.transport.resume_reading()
+
+    def data_received(self, data):
+        self.http_proto.transport.write(data)
 
 
-async def run(client, docker, stdin_fd, tty, image, command, *, loop, init=None,
+async def attach(docker, id_, *, loop):
+    stdin_proto = StdIOProtocol()
+    await loop.connect_read_pipe(lambda: stdin_proto, sys.stdin)
+    stdin_proto.transport.pause_reading()
+
+    stdout_proto = StdIOProtocol()
+    await loop.connect_write_pipe(lambda: stdout_proto, sys.stdout)
+
+    async with docker.attach(
+        id_, stdin_proto, stdout_proto,
+        params={'logs': '1', 'stream': '1',
+                'stdin': '1', 'stdout': '1', 'stderr': '1'}
+    ) as http_proto:
+        stdin_proto.http_proto = http_proto
+        stdout_proto.http_proto = http_proto
+
+        stdin_proto.transport.resume_reading()
+        await http_proto.wait_closed()
+
+
+async def run(client, docker, tty, image, command, *, loop, init=None,
               volumes=None, ports=None, environ=None, work_dir=None,
-              network=None, network_alias=None, wait_exit=3):
+              network=None, network_alias=None):
     c = await start(docker, image, command, init=init, tty=tty,
                     volumes=volumes,
                     ports=ports, environ=environ, work_dir=work_dir,
@@ -210,10 +172,8 @@ async def run(client, docker, stdin_fd, tty, image, command, *, loop, init=None,
         return
     try:
         await resize(docker, c['Id'])
-        exit_code = await attach(client, c, stdin_fd, loop=loop,
-                                 wait_exit=wait_exit)
-        if exit_code is None:
-            exit_code = await client.wait(c)
+        await attach(docker, c['Id'], loop=loop)
+        exit_code = await client.wait(c)
         return exit_code['StatusCode']
 
     finally:

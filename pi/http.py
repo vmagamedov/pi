@@ -1,5 +1,6 @@
 import socket
 import asyncio
+from asyncio import Event
 
 from typing import cast, NamedTuple
 from contextlib import asynccontextmanager
@@ -42,8 +43,9 @@ class Response(NamedTuple):
 
 class Stream:
 
-    def __init__(self, connection: h11.Connection,
+    def __init__(self, protocol, connection: h11.Connection,
                  transport: asyncio.Transport):
+        self.protocol = protocol  # FIXME: circular reference
         self.connection = connection
         self.transport = transport
 
@@ -125,6 +127,13 @@ class HTTPProtocol(asyncio.Protocol):
     transport: asyncio.Transport = None
     stream: Stream = None
 
+    hijacked = False
+
+    def __init__(self, *, stdin_proto=None, stdout_proto=None):
+        self._stdin_proto = stdin_proto
+        self._stdout_proto = stdout_proto
+        self._closed = Event()
+
     def connection_made(self, transport):
         sock = transport.get_extra_info('socket')
         if sock is not None:
@@ -132,32 +141,60 @@ class HTTPProtocol(asyncio.Protocol):
 
         self.connection = h11.Connection(h11.CLIENT)
         self.transport = transport
-        self.stream = Stream(self.connection, self.transport)
+        self.stream = Stream(self, self.connection, self.transport)
+
+    def pause_writing(self):
+        if self.hijacked:
+            assert self._stdin_proto
+            self._stdin_proto.transport.pause_reading()
+
+    def resume_writing(self):
+        if self.hijacked:
+            assert self._stdin_proto
+            self._stdin_proto.transport.resume_reading()
 
     def data_received(self, data: bytes):
-        self.connection.receive_data(data)
-        while True:
-            event = self.connection.next_event()
-            event_type = type(event)
-            if event_type is h11.Response:
-                self.stream.__response__(event)
-            elif event_type is h11.Data:
-                self.stream.__data__(event)
-            elif event_type is h11.EndOfMessage:
-                self.stream.__end__()
-            elif event is h11.NEED_DATA:
-                break
+        if self.hijacked:
+            assert self._stdout_proto
+            self._stdout_proto.transport.write(data)
+        else:
+            self.connection.receive_data(data)
+            while True:
+                event = self.connection.next_event()
+                # print(event)
+                event_type = type(event)
+                # print(event_type)
+                if event_type is h11.Response:
+                    self.stream.__response__(event)
+                elif event_type is h11.InformationalResponse:
+                    self.stream.__response__(event)
+                    if event.status_code == 101:
+                        self.hijacked = True
+                elif event_type is h11.Data:
+                    self.stream.__data__(event)
+                elif event_type is h11.EndOfMessage:
+                    self.stream.__end__()
+                elif event is h11.NEED_DATA:
+                    break
+                elif event is h11.PAUSED:
+                    break
 
     def connection_lost(self, exc):
-        self.stream.__terminated__()
+        if not self.hijacked:
+            self.stream.__terminated__()
         self.transport.close()
+        self._closed.set()
+
+    async def wait_closed(self):
+        return await self._closed.wait()
 
 
 @asynccontextmanager
-async def connect():
+async def connect(*, stdin_proto=None, stdout_proto=None):
     loop = asyncio.get_running_loop()
     transport, protocol = await loop.create_unix_connection(
-        HTTPProtocol,
+        lambda: HTTPProtocol(stdin_proto=stdin_proto,
+                             stdout_proto=stdout_proto),
         '/var/run/docker.sock',
     )
     try:

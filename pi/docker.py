@@ -1,4 +1,5 @@
 import json
+from contextlib import asynccontextmanager
 
 from urllib.parse import urlencode
 
@@ -91,6 +92,25 @@ async def start(id_, *, params=None):
             pass
         elif response.status_code == 304:
             pass
+        else:
+            raise response.error()
+
+
+@asynccontextmanager
+async def attach(id_, stdin_proto, stdout_proto, *, params=None):
+    assert isinstance(id_, str), id_
+    uri = '/containers/{id}/attach'.format(id=id_)
+    if params:
+        uri += '?' + urlencode(params)
+    async with connect(stdin_proto=stdin_proto, stdout_proto=stdout_proto) as stream:
+        await stream.send_request('POST', uri, [
+            ('Host', 'localhost'),
+            ('Connection', 'Upgrade'),
+            ('Upgrade', 'tcp'),
+        ])
+        response = await stream.recv_response()
+        if response.status_code == 101:
+            yield stream.protocol
         else:
             raise response.error()
 
