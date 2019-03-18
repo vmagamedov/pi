@@ -3,7 +3,7 @@ import sys
 from .._requires import click
 from .._requires.tabulate import tabulate
 
-from ..run import start
+from ..run import start_service
 from ..utils import search_container, sh_to_list
 from ..images import docker_image
 from ..environ import async_cmd
@@ -40,15 +40,16 @@ async def service_start(env, name):
         args = sh_to_list(service.args) if service.args else None
         di = docker_image(env, service.image)
         await ensure_network(env.client, env.network)
-
-        await start(env.docker, di, args,
-                    entrypoint=exec_,
-                    volumes=get_volumes(service.volumes),
-                    ports=service.ports,
-                    environ=service.environ,
-                    network=env.network,
-                    network_alias=service.network_name or service.name,
-                    label=label)
+        await start_service(
+            env.docker, di, args,
+            entrypoint=exec_,
+            volumes=get_volumes(service.volumes),
+            ports=service.ports,
+            environ=service.environ,
+            network=env.network,
+            network_alias=service.network_name or service.name,
+            label=label,
+        )
         click.echo('Service started')
 
 

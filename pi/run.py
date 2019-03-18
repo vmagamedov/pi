@@ -97,20 +97,12 @@ async def start(docker, image, command, *, init=None, tty=True,
     if networking_config:
         spec['NetworkingConfig'] = networking_config
 
-    try:
-        c = await docker.create_container(spec)
-    except HTTPError as e:
-        click.echo(e)
-        return
-    try:
-        await docker.start(c['Id'])
-    except HTTPError as e:
-        click.echo(e)
-        await docker.remove_container(c['Id'], params={
-            'v': 'true', 'force': 'true',
-        })
-    else:
-        return c
+    return await docker.create_container(spec)
+
+
+async def start_service(docker, *args, **kwargs):
+    c = await start(docker, *args, **kwargs)
+    await docker.start(c['Id'])
 
 
 async def resize(docker, id_):
@@ -158,6 +150,7 @@ async def attach(docker, id_, *, loop):
         stdout_proto.http_proto = http_proto
 
         stdin_proto.transport.resume_reading()
+        await resize(docker, id_)
         await http_proto.wait_closed()
 
 
@@ -168,14 +161,11 @@ async def run(client, docker, tty, image, command, *, loop, init=None,
                     volumes=volumes,
                     ports=ports, environ=environ, work_dir=work_dir,
                     network=network, network_alias=network_alias)
-    if c is None:
-        return
     try:
-        await resize(docker, c['Id'])
+        await docker.start(c['Id'])
         await attach(docker, c['Id'], loop=loop)
         exit_code = await client.wait(c)
         return exit_code['StatusCode']
-
     finally:
         await docker.remove_container(c['Id'],
                                       params={'v': 'true', 'force': 'true'})
