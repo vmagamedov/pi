@@ -76,14 +76,14 @@ BUILD_DONE = MessageType('BUILD_DONE')
 BUILD_FAILED = MessageType('BUILD_FAILED')
 
 
-async def pull_worker(client, queue, result_queue):
+async def pull_worker(docker, queue, result_queue):
     while True:
         dep = await queue.get()
         if dep.docker_image.name.startswith('localhost/'):
             await result_queue.put((PULL_FAILED, dep))
             continue
         try:
-            result = await pull_image(client, dep.docker_image)
+            result = await pull_image(docker, dep.docker_image)
         except Exception:
             log.exception('Failed to pull image')
             await result_queue.put((PULL_FAILED, dep))
@@ -188,7 +188,7 @@ async def resolve(client, docker, images_map, services_map, obj, *, loop,
     result_queue = Queue()
 
     puller_task = loop.create_task(
-        pull_worker(client, pull_queue, result_queue)
+        pull_worker(docker, pull_queue, result_queue)
     )
     builder_task = loop.create_task(
         build_worker(client, docker, images_map, build_queue, result_queue, loop=loop)

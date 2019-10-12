@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlencode
 
 from .http import connect
+from ._requires.docker import auth
 
 
 async def _recv_json(stream, response):
@@ -165,5 +166,43 @@ async def remove_container(id_, *, params=None):
         response = await stream.recv_response()
         if response.status_code == 204:
             pass
+        else:
+            raise response.error()
+
+
+async def create_image(*, params=None):
+    uri = '/images/create'
+    if params:
+        uri += '?' + urlencode(params)
+    async with connect() as stream:
+        await stream.send_request('POST', uri, [
+            ('Host', 'localhost'),
+        ])
+        response = await stream.recv_response()
+        if response.status_code == 200:
+            async for chunk in stream.recv_data_chunked():
+                yield chunk
+        else:
+            raise response.error()
+
+
+async def push(name, *, params):
+    uri = '/images/{name}/push'.format(name=name)
+    if params:
+        uri += '?' + urlencode(params)
+    headers = [('Host', 'localhost')]
+
+    auth_cfg = auth.load_config()
+    registry, _ = auth.resolve_repository_name(name)
+    auth_header = auth_cfg.resolve_authconfig(registry)
+    if auth_header:
+        headers.append(('X-Registry-Auth', auth.encode_header(auth_header)))
+
+    async with connect() as stream:
+        await stream.send_request('POST', uri, headers)
+        response = await stream.recv_response()
+        if response.status_code == 200:
+            async for chunk in stream.recv_data_chunked():
+                yield chunk
         else:
             raise response.error()

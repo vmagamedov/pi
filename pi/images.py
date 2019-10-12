@@ -1,7 +1,9 @@
-import sys
+import json
 import hashlib
 
+from .http import HTTPError
 from .types import DockerImage, Image, ActionType
+from .status import Status
 
 
 class Hasher:
@@ -99,61 +101,51 @@ def get_images(config):
     return [i for i in config if isinstance(i, Image)]
 
 
-async def _echo_download_progress(output):
-    error = False
-    last_id = None
+def status_gen(status, action, image):
+    key = status.add_task('=> {} image {}'.format(action, image))
+    steps = {}
     while True:
-        items = await output.read()
-        if not items:
-            break
-        for i in items:
-            error = error or 'error' in i
-
-            progress_id = i.get('id')
-            if last_id:
-                if progress_id == last_id:
-                    sys.stdout.write('\x1b[2K\r')
-                elif not progress_id or progress_id != last_id:
-                    sys.stdout.write('\n')
-            last_id = progress_id
-
-            if progress_id:
-                sys.stdout.write('{}: '.format(progress_id))
-            sys.stdout.write(i.get('status') or i.get('error') or '')
-
-            progress_bar = i.get('progress')
-            if progress_bar:
-                sys.stdout.write(' ' + progress_bar)
-
-            if not progress_id:
-                sys.stdout.write('\n')
-            sys.stdout.flush()
-    if last_id:
-        sys.stdout.write('\n')
-        sys.stdout.flush()
-    return not error
+        event = yield
+        if event.get('status', '').startswith('Pulling from '):
+            continue
+        if 'id' in event:
+            title = '  [{}] '.format(event['id']) + event['status']
+            if 'progress' in event:
+                title += ': ' + event['progress']
+            if event['id'] in steps:
+                status.update(steps[event['id']], title)
+            else:
+                steps[event['id']] = status.add_step(key, title)
 
 
-async def pull(client, docker_image):
-    from .client import APIError
-
+async def pull(docker, docker_image_: DockerImage):
+    repository, _, tag = docker_image_.name.partition(':')
+    params = {'fromImage': repository, 'tag': tag}
     try:
-        output = await client.pull(docker_image.name, stream=True, decode=True)
-    except APIError as e:
-        if e.response.status_code == 404:
-            return False
-        raise
+        with Status() as status:
+            gen = status_gen(status, 'Pulling', docker_image_.name)
+            gen.send(None)
+            async for event in docker.create_image(params=params):
+                gen.send(json.loads(event.decode('utf-8')))
+    except HTTPError:
+        return False
     else:
-        with output as reader:
-            success = await _echo_download_progress(reader)
-            return success
+        return True
 
 
-async def push(client, docker_image):
-    output = await client.push(docker_image.name, stream=True, decode=True)
-    with output as reader:
-        success = await _echo_download_progress(reader)
-        return success
+async def push(docker, docker_image_):
+    name, _, tag = docker_image_.name.partition(':')
+    params = {'tag': tag}
+    try:
+        with Status() as status:
+            gen = status_gen(status, 'Pushing', docker_image_.name)
+            gen.send(None)
+            async for event in docker.push(name, params=params):
+                gen.send(json.loads(event.decode('utf-8')))
+    except HTTPError:
+        return False
+    else:
+        return True
 
 
 async def build(client, docker, images_map, image, *, loop):

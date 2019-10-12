@@ -111,12 +111,6 @@ class AsyncClient:
         result = await self._loop.run_in_executor(None, wrapper)
         return result
 
-    def build(self, *args, stream=False, **kwargs):
-        def proc():
-            return self._exec(self._client.build, *args,
-                              stream=stream, **kwargs)
-        return _AsyncContextManagerAdapter(proc) if stream else proc()
-
     def put_archive(self, *args, **kwargs):
         return self._exec(self._client.put_archive, *args, **kwargs)
 
@@ -128,12 +122,6 @@ class AsyncClient:
 
     def unpause(self, *args, **kwargs):
         return self._exec(self._client.unpause, *args, **kwargs)
-
-    def pull(self, *args, **kwargs):
-        return self._exec(self._client.pull, *args, **kwargs)
-
-    def push(self, *args, **kwargs):
-        return self._exec(self._client.push, *args, **kwargs)
 
     def stop(self, *args, **kwargs):
         return self._exec(self._client.stop, *args, **kwargs)

@@ -73,7 +73,7 @@ async def image_info(env, name, repo_tag):
 @async_cmd
 async def image_pull(env, name):
     image = _get_image(env.images, name)
-    success = await pull_image(env.client, image)
+    success = await pull_image(env.docker, image)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
@@ -85,7 +85,7 @@ async def image_pull(env, name):
 @async_cmd
 async def image_push(env, name):
     image = _get_image(env.images, name)
-    success = await push_image(env.client, image)
+    success = await push_image(env.docker, image)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)
