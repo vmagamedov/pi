@@ -120,15 +120,6 @@ class AsyncClient:
     def put_archive(self, *args, **kwargs):
         return self._exec(self._client.put_archive, *args, **kwargs)
 
-    def exec_create(self, *args, **kwargs):
-        return self._exec(self._client.exec_create, *args, **kwargs)
-
-    def exec_start(self, *args, **kwargs):
-        return self._exec(self._client.exec_start, *args, **kwargs)
-
-    def exec_inspect(self, *args, **kwargs):
-        return self._exec(self._client.exec_inspect, *args, **kwargs)
-
     def pause(self, *args, **kwargs):
         return self._exec(self._client.pause, *args, **kwargs)
 

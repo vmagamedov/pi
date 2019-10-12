@@ -1,4 +1,6 @@
+import io
 import os
+import sys
 import math
 import uuid
 import tarfile
@@ -7,7 +9,7 @@ import tempfile
 import unicodedata
 
 from pathlib import Path
-from asyncio import wait, Queue, Event, gather, FIRST_EXCEPTION
+from asyncio import wait, Queue, Event, gather, FIRST_EXCEPTION, WriteTransport
 
 from concurrent.futures import ProcessPoolExecutor
 
@@ -15,6 +17,7 @@ from ._requires import attr
 from ._requires import jinja2
 from ._requires import requests
 
+from .run import StdIOProtocol
 from .types import ActionType
 from .utils import terminate
 from .images import docker_image, image_versions
@@ -250,15 +253,39 @@ def task_cmd(task, results):
     return t.render(ctx)
 
 
-async def _exec(client, container, cmd):
+class WriteBuffer(WriteTransport):
+
+    def __init__(self):
+        super().__init__()
+        self._buffer = io.BytesIO()
+
+    def write(self, data):
+        self._buffer.write(data)
+
+    def dump(self):
+        return self._buffer.getvalue()
+
+
+async def _exec(docker, id_, cmd):
     if isinstance(cmd, str):
         cmd = ['/bin/sh', '-c', cmd]
-    exec_id = await client.exec_create(container, cmd)
-    output = await client.exec_start(exec_id)
-    info = await client.exec_inspect(exec_id)
+
+    stdout_buffer = WriteBuffer()
+    stdout_proto = StdIOProtocol()
+    stdout_proto.connection_made(stdout_buffer)
+
+    exec_ = await docker.exec_create(id_, {
+        'Cmd': cmd,
+        'AttachStdout': True,
+        'AttachStderr': True,
+    })
+    async with docker.exec_start(exec_['Id'], {}, None, stdout_proto) as http_proto:
+        await http_proto.wait_closed()
+    info = await docker.exec_inspect(exec_['Id'])
     exit_code = info['ExitCode']
     if exit_code:
-        print(output.decode('utf-8'))  # FIXME: proper output
+        # FIXME: proper output
+        print(stdout_buffer.dump().decode('utf-8'), file=sys.stderr)
     return exit_code
 
 
@@ -288,7 +315,7 @@ async def build(client, docker, images_map, image, *, loop):
     })
     try:
         await docker.start(c['Id'])
-        exit_code = await _exec(client, c, ['mkdir', '/.pi'])
+        exit_code = await _exec(docker, c['Id'], ['mkdir', '/.pi'])
         if exit_code:
             return False
 
@@ -321,11 +348,11 @@ async def build(client, docker, images_map, image, *, loop):
             cmd = task_cmd(task, task_results)
             current_index = '{{:{}d}}'.format(padding).format(i)
             print('[{}/{}] {}'.format(current_index, total, cmd))
-            exit_code = await _exec(client, c, cmd)
+            exit_code = await _exec(docker, c['Id'], cmd)
             if exit_code:
                 return False
 
-        exit_code = await _exec(client, c, ['rm', '-rf', '/.pi'])
+        exit_code = await _exec(docker, c['Id'], ['rm', '-rf', '/.pi'])
         if exit_code:
             return False
 
