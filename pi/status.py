@@ -77,7 +77,7 @@ class Status:
     def __enter__(self):
         return self
 
-    def __aexit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self._move(len(self._idx))
         self._erase()
         self._output.flush()

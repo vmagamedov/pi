@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlencode
 
 from .http import connect
+from .utils import cached_property
 from ._requires.docker import auth
 
 
@@ -167,14 +168,30 @@ class Docker:
             else:
                 raise response.error()
 
+    @cached_property
+    def _auth_config(self):
+        return auth.load_config()
+
+    def _auth_header(self, name):
+        registry, _ = auth.resolve_repository_name(name)
+        auth_header = self._auth_config.resolve_authconfig(registry)
+        if auth_header:
+            return auth.encode_header(auth_header)
+        else:
+            return None
+
     async def create_image(self, *, params=None):
         uri = '/images/create'
         if params:
             uri += '?' + urlencode(params)
+        headers = [('Host', 'localhost')]
+        if 'fromImage' in params:
+            auth_header = self._auth_header(params['fromImage'])
+            if auth_header:
+                headers.append(('X-Registry-Auth', auth_header))
+
         async with connect() as stream:
-            await stream.send_request('POST', uri, [
-                ('Host', 'localhost'),
-            ])
+            await stream.send_request('POST', uri, headers)
             response = await stream.recv_response()
             if response.status_code == 200:
                 async for chunk in stream.recv_data_chunked():
@@ -187,12 +204,9 @@ class Docker:
         if params:
             uri += '?' + urlencode(params)
         headers = [('Host', 'localhost')]
-
-        auth_cfg = auth.load_config()
-        registry, _ = auth.resolve_repository_name(name)
-        auth_header = auth_cfg.resolve_authconfig(registry)
+        auth_header = self._auth_header(name)
         if auth_header:
-            headers.append(('X-Registry-Auth', auth.encode_header(auth_header)))
+            headers.append(('X-Registry-Auth', auth_header))
 
         async with connect() as stream:
             await stream.send_request('POST', uri, headers)

@@ -138,8 +138,9 @@ async def pull(docker, docker_image_: DockerImage, *, status):
     try:
         gen = _process_pull_progress(status, docker_image_.name)
         gen.send(None)
-        async for event in docker.create_image(params=params):
-            gen.send(json.loads(event.decode('utf-8')))
+        async for chunk in docker.create_image(params=params):
+            for doc in chunk.decode('utf-8').splitlines():
+                gen.send(json.loads(doc))
     except HTTPError:
         return False
     else:
@@ -152,8 +153,9 @@ async def push(docker, docker_image_, *, status):
     try:
         gen = _process_push_progress(status, docker_image_.name)
         gen.send(None)
-        async for event in docker.push(name, params=params):
-            gen.send(json.loads(event.decode('utf-8')))
+        async for chunk in docker.push(name, params=params):
+            for doc in chunk.decode('utf-8').splitlines():
+                gen.send(json.loads(doc))
     except HTTPError:
         return False
     else:
