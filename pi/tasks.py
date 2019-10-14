@@ -279,7 +279,9 @@ async def _exec(docker, id_, cmd):
         'AttachStdout': True,
         'AttachStderr': True,
     })
-    async with docker.exec_start(exec_['Id'], {}, None, stdout_proto) as http_proto:
+    async with docker.exec_start(
+        exec_['Id'], {}, None, stdout_proto
+    ) as http_proto:
         await http_proto.wait_closed()
     info = await docker.exec_inspect(exec_['Id'])
     exit_code = info['ExitCode']

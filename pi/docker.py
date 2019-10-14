@@ -112,7 +112,9 @@ async def exec_create(id_, spec):
 async def exec_start(id_, spec, stdin_proto, stdout_proto):
     assert isinstance(id_, str), id_
     uri = '/exec/{id}/start'.format(id=id_)
-    async with connect(stdin_proto=stdin_proto, stdout_proto=stdout_proto) as stream:
+    async with connect(
+        stdin_proto=stdin_proto, stdout_proto=stdout_proto
+    ) as stream:
         json_data = json.dumps(spec).encode('utf-8')
         await stream.send_request('POST', uri, [
             ('Host', 'localhost'),
@@ -141,7 +143,9 @@ async def attach(id_, stdin_proto, stdout_proto, *, params=None):
     uri = '/containers/{id}/attach'.format(id=id_)
     if params:
         uri += '?' + urlencode(params)
-    async with connect(stdin_proto=stdin_proto, stdout_proto=stdout_proto) as stream:
+    async with connect(
+        stdin_proto=stdin_proto, stdout_proto=stdout_proto
+    ) as stream:
         await stream.send_request('POST', uri, [
             ('Host', 'localhost'),
             ('Connection', 'Upgrade'),
