@@ -76,14 +76,14 @@ BUILD_DONE = MessageType('BUILD_DONE')
 BUILD_FAILED = MessageType('BUILD_FAILED')
 
 
-async def pull_worker(docker, queue, result_queue):
+async def pull_worker(docker, queue, result_queue, *, status):
     while True:
         dep = await queue.get()
         if dep.docker_image.name.startswith('localhost/'):
             await result_queue.put((PULL_FAILED, dep))
             continue
         try:
-            result = await pull_image(docker, dep.docker_image)
+            result = await pull_image(docker, dep.docker_image, status=status)
         except Exception:
             log.exception('Failed to pull image')
             await result_queue.put((PULL_FAILED, dep))
@@ -92,12 +92,13 @@ async def pull_worker(docker, queue, result_queue):
             await result_queue.put((status, dep))
 
 
-async def build_worker(client, docker, images_map, queue, result_queue, *, loop):
+async def build_worker(client, docker, images_map, queue, result_queue, *,
+                       loop, status):
     while True:
         dep = await queue.get()
         try:
             result = await build_image(client, docker, images_map, dep.image,
-                                       loop=loop)
+                                       loop=loop, status=status)
         except Exception:
             log.exception('Failed to build image')
             await result_queue.put((BUILD_FAILED, dep))
@@ -171,7 +172,7 @@ def mark_failed(deps_map, in_work, item):
 
 
 async def resolve(client, docker, images_map, services_map, obj, *, loop,
-                  pull=False, build=False, fail_fast=False):
+                  status, pull=False, build=False, fail_fast=False):
     deps = ImagesCollector.collect(images_map, services_map, obj)
     missing = await check(docker, deps)
     if not missing or not (pull or build):
@@ -188,10 +189,11 @@ async def resolve(client, docker, images_map, services_map, obj, *, loop,
     result_queue = Queue()
 
     puller_task = loop.create_task(
-        pull_worker(docker, pull_queue, result_queue)
+        pull_worker(docker, pull_queue, result_queue, status=status)
     )
     builder_task = loop.create_task(
-        build_worker(client, docker, images_map, build_queue, result_queue, loop=loop)
+        build_worker(client, docker, images_map, build_queue, result_queue,
+                     loop=loop, status=status)
     )
     try:
         while deps_map or in_work:

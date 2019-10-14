@@ -8,6 +8,7 @@ from .._requires import jinja2
 from ..run import run
 from ..types import CommandType, LocalPath, Mode
 from ..images import docker_image
+from ..status import Status
 from ..environ import async_cmd
 from ..console import config_tty
 from ..network import ensure_network
@@ -102,16 +103,18 @@ async def _start_services(env, command):
 
 
 async def _callback(command, env, **params):
-    await resolve(
-        env.client,
-        env.docker,
-        env.images,
-        env.services,
-        command,
-        loop=env.loop,
-        pull=True,
-        build=True,
-    )
+    with Status() as status:
+        await resolve(
+            env.client,
+            env.docker,
+            env.images,
+            env.services,
+            command,
+            loop=env.loop,
+            status=status,
+            pull=True,
+            build=True,
+        )
     await _start_services(env, command)
     await ensure_network(env.client, env.network)
 

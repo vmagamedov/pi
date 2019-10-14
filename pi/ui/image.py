@@ -9,6 +9,7 @@ from ..types import DockerImage, Mode, LocalPath
 from ..utils import format_size
 from ..images import pull as pull_image, push as push_image, docker_image
 from ..images import image_versions
+from ..status import Status
 from ..console import pretty, config_tty
 from ..environ import async_cmd
 from ..resolve import resolve
@@ -24,16 +25,18 @@ from .common import ExtGroup
 @async_cmd
 async def image_build(env, name):
     image = env.images.get(name)
-    failed = await resolve(
-        env.client,
-        env.docker,
-        env.images,
-        env.services,
-        image,
-        loop=env.loop,
-        pull=True,
-        build=True,
-    )
+    with Status() as status:
+        failed = await resolve(
+            env.client,
+            env.docker,
+            env.images,
+            env.services,
+            image,
+            loop=env.loop,
+            status=status,
+            pull=True,
+            build=True,
+        )
     if failed:
         click.echo('Failed to build image {}'.format(name))
         sys.exit(1)
@@ -73,7 +76,8 @@ async def image_info(env, name, repo_tag):
 @async_cmd
 async def image_pull(env, name):
     image = _get_image(env.images, name)
-    success = await pull_image(env.docker, image)
+    with Status() as status:
+        success = await pull_image(env.docker, image, status=status)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
@@ -85,7 +89,8 @@ async def image_pull(env, name):
 @async_cmd
 async def image_push(env, name):
     image = _get_image(env.images, name)
-    success = await push_image(env.docker, image)
+    with Status() as status:
+        success = await push_image(env.docker, image, status=status)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)

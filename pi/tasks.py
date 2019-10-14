@@ -289,9 +289,12 @@ async def _exec(docker, id_, cmd):
     return exit_code
 
 
-async def build(client, docker, images_map, image, *, loop):
+async def build(client, docker, images_map, image, *, loop, status):
     version, = image_versions(images_map, [image])
     from_ = docker_image(images_map, image.from_)
+
+    task_key = status.add_task('==> Building image {}:{} ({})'
+                               .format(image.repository, version, image.name))
 
     io_queue = Queue()
     io_executor = IOExecutor(loop=loop)
@@ -347,7 +350,9 @@ async def build(client, docker, images_map, image, *, loop):
 
             cmd = task_cmd(task, task_results)
             current_index = '{{:{}d}}'.format(padding).format(i)
-            print('[{}/{}] {}'.format(current_index, total, cmd))
+            status.add_step(
+                task_key, '[{}/{}] {}'.format(current_index, total, cmd),
+            )
             exit_code = await _exec(docker, c['Id'], cmd)
             if exit_code:
                 return False

@@ -3,7 +3,6 @@ import hashlib
 
 from .http import HTTPError
 from .types import DockerImage, Image, ActionType
-from .status import Status
 
 
 class Hasher:
@@ -101,8 +100,8 @@ def get_images(config):
     return [i for i in config if isinstance(i, Image)]
 
 
-def status_gen(status, action, image):
-    key = status.add_task('=> {} image {}'.format(action, image))
+def _process_pull_progress(status, image):
+    key = status.add_task('=> Pulling image {}'.format(image))
     steps = {}
     while True:
         event = yield
@@ -118,38 +117,52 @@ def status_gen(status, action, image):
                 steps[event['id']] = status.add_step(key, title)
 
 
-async def pull(docker, docker_image_: DockerImage):
+def _process_push_progress(status, image):
+    key = status.add_task('=> Pushing image {}'.format(image))
+    steps = {}
+    while True:
+        event = yield
+        if 'id' in event:
+            title = '  [{}] '.format(event['id']) + event['status']
+            if 'progress' in event:
+                title += ': ' + event['progress']
+            if event['id'] in steps:
+                status.update(steps[event['id']], title)
+            else:
+                steps[event['id']] = status.add_step(key, title)
+
+
+async def pull(docker, docker_image_: DockerImage, *, status):
     repository, _, tag = docker_image_.name.partition(':')
     params = {'fromImage': repository, 'tag': tag}
     try:
-        with Status() as status:
-            gen = status_gen(status, 'Pulling', docker_image_.name)
-            gen.send(None)
-            async for event in docker.create_image(params=params):
-                gen.send(json.loads(event.decode('utf-8')))
+        gen = _process_pull_progress(status, docker_image_.name)
+        gen.send(None)
+        async for event in docker.create_image(params=params):
+            gen.send(json.loads(event.decode('utf-8')))
     except HTTPError:
         return False
     else:
         return True
 
 
-async def push(docker, docker_image_):
+async def push(docker, docker_image_, *, status):
     name, _, tag = docker_image_.name.partition(':')
     params = {'tag': tag}
     try:
-        with Status() as status:
-            gen = status_gen(status, 'Pushing', docker_image_.name)
-            gen.send(None)
-            async for event in docker.push(name, params=params):
-                gen.send(json.loads(event.decode('utf-8')))
+        gen = _process_push_progress(status, docker_image_.name)
+        gen.send(None)
+        async for event in docker.push(name, params=params):
+            gen.send(json.loads(event.decode('utf-8')))
     except HTTPError:
         return False
     else:
         return True
 
 
-async def build(client, docker, images_map, image, *, loop):
+async def build(client, docker, images_map, image, *, loop, status):
     from .tasks import build as build_tasks
 
-    result = await build_tasks(client, docker, images_map, image, loop=loop)
+    result = await build_tasks(client, docker, images_map, image,
+                               loop=loop, status=status)
     return result
