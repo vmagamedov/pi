@@ -30,9 +30,9 @@ class Environ:
 
     @cached_property
     def docker(self):
-        from . import docker
+        from .docker import Docker
 
-        return docker
+        return Docker()
 
 
 def async_cmd(func):

@@ -57,156 +57,148 @@ async def _post_json(path, data=None, *, _ok_statuses=None):
                                _ok_statuses=_ok_statuses)
 
 
-async def images():
-    return await _get_json('/images/json')
+class Docker:
 
+    async def images(self):
+        return await _get_json('/images/json')
 
-async def create_container(spec, *, params=None):
-    uri = '/containers/create'
-    if params:
-        uri += '?' + urlencode(params)
-    return await _post_json(uri, spec)
+    async def create_container(self, spec, *, params=None):
+        uri = '/containers/create'
+        if params:
+            uri += '?' + urlencode(params)
+        return await _post_json(uri, spec)
 
+    async def resize(self, id_, *, params=None):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/resize'.format(id=id_)
+        if params:
+            uri += '?' + urlencode(params)
+        async with connect() as stream:
+            await stream.send_request('POST', uri, [
+                ('Host', 'localhost'),
+            ])
+            response = await stream.recv_response()
+            if response.status_code == 200:
+                pass
+            else:
+                raise response.error()
 
-async def resize(id_, *, params=None):
-    assert isinstance(id_, str), id_
-    uri = '/containers/{id}/resize'.format(id=id_)
-    if params:
-        uri += '?' + urlencode(params)
-    async with connect() as stream:
-        await stream.send_request('POST', uri, [
-            ('Host', 'localhost'),
-        ])
-        response = await stream.recv_response()
-        if response.status_code == 200:
-            pass
-        else:
-            raise response.error()
+    async def start(self, id_, *, params=None):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/start'.format(id=id_)
+        if params:
+            uri += '?' + urlencode(params)
+        async with connect() as stream:
+            await stream.send_request('POST', uri, [
+                ('Host', 'localhost'),
+            ])
+            response = await stream.recv_response()
+            if response.status_code == 204:
+                pass
+            elif response.status_code == 304:
+                pass
+            else:
+                raise response.error()
 
+    async def exec_create(self, id_, spec):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/exec'.format(id=id_)
+        return await _post_json(uri, spec)
 
-async def start(id_, *, params=None):
-    assert isinstance(id_, str), id_
-    uri = '/containers/{id}/start'.format(id=id_)
-    if params:
-        uri += '?' + urlencode(params)
-    async with connect() as stream:
-        await stream.send_request('POST', uri, [
-            ('Host', 'localhost'),
-        ])
-        response = await stream.recv_response()
-        if response.status_code == 204:
-            pass
-        elif response.status_code == 304:
-            pass
-        else:
-            raise response.error()
+    @asynccontextmanager
+    async def exec_start(self, id_, spec, stdin_proto, stdout_proto):
+        assert isinstance(id_, str), id_
+        uri = '/exec/{id}/start'.format(id=id_)
+        async with connect(
+            stdin_proto=stdin_proto, stdout_proto=stdout_proto
+        ) as stream:
+            json_data = json.dumps(spec).encode('utf-8')
+            await stream.send_request('POST', uri, [
+                ('Host', 'localhost'),
+                ('Content-Type', 'application/json'),
+                ('Content-Length', str(len(json_data))),
+                ('Connection', 'Upgrade'),
+                ('Upgrade', 'tcp'),
+            ], end_stream=False)
+            await stream.send_data(json_data)
+            response = await stream.recv_response()
+            if response.status_code == 101:
+                yield stream.protocol
+            else:
+                raise response.error()
 
+    async def exec_inspect(self, id_):
+        assert isinstance(id_, str), id_
+        uri = '/exec/{id}/json'.format(id=id_)
+        return await _get_json(uri)
 
-async def exec_create(id_, spec):
-    assert isinstance(id_, str), id_
-    uri = '/containers/{id}/exec'.format(id=id_)
-    return await _post_json(uri, spec)
+    @asynccontextmanager
+    async def attach(self, id_, stdin_proto, stdout_proto, *, params=None):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/attach'.format(id=id_)
+        if params:
+            uri += '?' + urlencode(params)
+        async with connect(
+            stdin_proto=stdin_proto, stdout_proto=stdout_proto
+        ) as stream:
+            await stream.send_request('POST', uri, [
+                ('Host', 'localhost'),
+                ('Connection', 'Upgrade'),
+                ('Upgrade', 'tcp'),
+            ])
+            response = await stream.recv_response()
+            if response.status_code == 101:
+                yield stream.protocol
+            else:
+                raise response.error()
 
+    async def remove_container(self, id_, *, params=None):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}'.format(id=id_)
+        if params:
+            uri += '?' + urlencode(params)
+        async with connect() as stream:
+            await stream.send_request('DELETE', uri, [
+                ('Host', 'localhost'),
+            ])
+            response = await stream.recv_response()
+            if response.status_code == 204:
+                pass
+            else:
+                raise response.error()
 
-@asynccontextmanager
-async def exec_start(id_, spec, stdin_proto, stdout_proto):
-    assert isinstance(id_, str), id_
-    uri = '/exec/{id}/start'.format(id=id_)
-    async with connect(
-        stdin_proto=stdin_proto, stdout_proto=stdout_proto
-    ) as stream:
-        json_data = json.dumps(spec).encode('utf-8')
-        await stream.send_request('POST', uri, [
-            ('Host', 'localhost'),
-            ('Content-Type', 'application/json'),
-            ('Content-Length', str(len(json_data))),
-            ('Connection', 'Upgrade'),
-            ('Upgrade', 'tcp'),
-        ], end_stream=False)
-        await stream.send_data(json_data)
-        response = await stream.recv_response()
-        if response.status_code == 101:
-            yield stream.protocol
-        else:
-            raise response.error()
+    async def create_image(self, *, params=None):
+        uri = '/images/create'
+        if params:
+            uri += '?' + urlencode(params)
+        async with connect() as stream:
+            await stream.send_request('POST', uri, [
+                ('Host', 'localhost'),
+            ])
+            response = await stream.recv_response()
+            if response.status_code == 200:
+                async for chunk in stream.recv_data_chunked():
+                    yield chunk
+            else:
+                raise response.error()
 
+    async def push(self, name, *, params):
+        uri = '/images/{name}/push'.format(name=name)
+        if params:
+            uri += '?' + urlencode(params)
+        headers = [('Host', 'localhost')]
 
-async def exec_inspect(id_):
-    assert isinstance(id_, str), id_
-    uri = '/exec/{id}/json'.format(id=id_)
-    return await _get_json(uri)
+        auth_cfg = auth.load_config()
+        registry, _ = auth.resolve_repository_name(name)
+        auth_header = auth_cfg.resolve_authconfig(registry)
+        if auth_header:
+            headers.append(('X-Registry-Auth', auth.encode_header(auth_header)))
 
-
-@asynccontextmanager
-async def attach(id_, stdin_proto, stdout_proto, *, params=None):
-    assert isinstance(id_, str), id_
-    uri = '/containers/{id}/attach'.format(id=id_)
-    if params:
-        uri += '?' + urlencode(params)
-    async with connect(
-        stdin_proto=stdin_proto, stdout_proto=stdout_proto
-    ) as stream:
-        await stream.send_request('POST', uri, [
-            ('Host', 'localhost'),
-            ('Connection', 'Upgrade'),
-            ('Upgrade', 'tcp'),
-        ])
-        response = await stream.recv_response()
-        if response.status_code == 101:
-            yield stream.protocol
-        else:
-            raise response.error()
-
-
-async def remove_container(id_, *, params=None):
-    assert isinstance(id_, str), id_
-    uri = '/containers/{id}'.format(id=id_)
-    if params:
-        uri += '?' + urlencode(params)
-    async with connect() as stream:
-        await stream.send_request('DELETE', uri, [
-            ('Host', 'localhost'),
-        ])
-        response = await stream.recv_response()
-        if response.status_code == 204:
-            pass
-        else:
-            raise response.error()
-
-
-async def create_image(*, params=None):
-    uri = '/images/create'
-    if params:
-        uri += '?' + urlencode(params)
-    async with connect() as stream:
-        await stream.send_request('POST', uri, [
-            ('Host', 'localhost'),
-        ])
-        response = await stream.recv_response()
-        if response.status_code == 200:
-            async for chunk in stream.recv_data_chunked():
-                yield chunk
-        else:
-            raise response.error()
-
-
-async def push(name, *, params):
-    uri = '/images/{name}/push'.format(name=name)
-    if params:
-        uri += '?' + urlencode(params)
-    headers = [('Host', 'localhost')]
-
-    auth_cfg = auth.load_config()
-    registry, _ = auth.resolve_repository_name(name)
-    auth_header = auth_cfg.resolve_authconfig(registry)
-    if auth_header:
-        headers.append(('X-Registry-Auth', auth.encode_header(auth_header)))
-
-    async with connect() as stream:
-        await stream.send_request('POST', uri, headers)
-        response = await stream.recv_response()
-        if response.status_code == 200:
-            async for chunk in stream.recv_data_chunked():
-                yield chunk
-        else:
-            raise response.error()
+        async with connect() as stream:
+            await stream.send_request('POST', uri, headers)
+            response = await stream.recv_response()
+            if response.status_code == 200:
+                async for chunk in stream.recv_data_chunked():
+                    yield chunk
+            else:
+                raise response.error()
