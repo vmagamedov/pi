@@ -106,7 +106,7 @@ async def image_run(env, name, args):
     volumes = [LocalPath('.', '.', Mode.RW)]
 
     with config_tty() as tty:
-        exit_code = await run(env.client, env.docker, tty, image, args,
+        exit_code = await run(env.docker, tty, image, args,
                               loop=env.loop, volumes=volumes,
                               work_dir='.')
         sys.exit(exit_code)
@@ -124,7 +124,7 @@ async def image_gc(env, count):
         click.echo('Count should be more or equal to 0')
         sys.exit(-1)
     known_repos = {i.repository for i in env.images}
-    containers = await env.client.containers(all=True)
+    containers = await env.docker.containers(params={'all': 'true'})
     repo_tags_used = {c['Image'] for c in containers}
 
     by_repo = defaultdict(list)
@@ -148,7 +148,7 @@ async def image_gc(env, count):
             to_delete.append('{}:{}'.format(repo, tag.value))
 
     for image in to_delete:
-        await env.client.remove_image(image)
+        await env.docker.remove_image(image)
         click.echo('Removed: {}'.format(image))
 
 

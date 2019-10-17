@@ -363,9 +363,13 @@ async def build(client, docker, images_map, image, *, loop, status):
         if exit_code:
             return False
 
-        await client.pause(c)
-        await client.commit(c, image.repository, version)
-        await client.unpause(c)
+        await docker.pause(c['Id'])
+        await docker.commit(params={
+            'container': c['Id'],
+            'repo': image.repository,
+            'tag': version,
+        })
+        await docker.unpause(c['Id'])
         return True
 
     finally:

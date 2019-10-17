@@ -25,7 +25,10 @@ else:
 
 
 class HTTPError(Exception):
-    pass
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
 
 
 class Response(NamedTuple):

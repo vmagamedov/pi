@@ -28,7 +28,7 @@ async def _recv_json(stream, response):
 
 async def _request_json(method, path, data=None, *, _ok_statuses=None):
     if _ok_statuses is None:
-        _ok_statuses = frozenset({200, 201})
+        _ok_statuses = frozenset({200, 201, 204})
     async with connect() as stream:
         headers = [
             ('Host', 'localhost'),
@@ -56,6 +56,10 @@ async def _get_json(path, *, _ok_statuses=None):
 async def _post_json(path, data=None, *, _ok_statuses=None):
     return await _request_json('POST', path, data=data,
                                _ok_statuses=_ok_statuses)
+
+
+async def _delete_json(path, *, _ok_statuses=None):
+    return await _request_json('DELETE', path, _ok_statuses=_ok_statuses)
 
 
 class Docker:
@@ -216,3 +220,45 @@ class Docker:
                     yield chunk
             else:
                 raise response.error()
+
+    async def containers(self, *, params):
+        uri = '/containers/json'
+        if params:
+            uri += '?' + urlencode(params)
+        return await _get_json(uri)
+
+    async def remove_image(self, name):
+        uri = '/images/{name}'.format(name=name)
+        return await _delete_json(uri)
+
+    async def wait(self, id_):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/wait'.format(id=id_)
+        return await _post_json(uri)
+
+    async def stop(self, id_, *, params):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/stop'.format(id=id_)
+        if params:
+            uri += '?' + urlencode(params)
+        return await _post_json(uri)
+
+    async def pause(self, id_):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/pause'.format(id=id_)
+        return await _post_json(uri)
+
+    async def commit(self, *, params):
+        uri = '/commit'
+        if params:
+            uri += '?' + urlencode(params)
+        return await _post_json(uri)
+
+    async def unpause(self, id_):
+        assert isinstance(id_, str), id_
+        uri = '/containers/{id}/unpause'.format(id=id_)
+        return await _post_json(uri)
+
+    async def create_network(self, *, data):
+        uri = '/networks/create'
+        return await _post_json(uri, data=data)

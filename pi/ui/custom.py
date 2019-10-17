@@ -99,7 +99,7 @@ def _required_services(env, obj, *, _seen=None, _all=None):
 
 async def _start_services(env, command):
     services = list(_required_services(env, command))
-    await ensure_running(env.client, env.docker, env.namespace, services)
+    await ensure_running(env.docker, env.namespace, services)
 
 
 async def _callback(command, env, **params):
@@ -116,7 +116,7 @@ async def _callback(command, env, **params):
             build=True,
         )
     await _start_services(env, command)
-    await ensure_network(env.client, env.network)
+    await ensure_network(env.docker, env.network)
 
     di = docker_image(env.images, command.image)
     volumes = [LocalPath('.', '.', Mode.RW)]
@@ -132,7 +132,7 @@ async def _callback(command, env, **params):
 
     with config_tty() as tty:
         exit_code = await run(
-            env.client, env.docker, tty, di, command_run,
+            env.docker, tty, di, command_run,
             loop=env.loop,
             init=True,
             volumes=volumes,

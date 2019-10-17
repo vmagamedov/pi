@@ -1,12 +1,14 @@
-from .client import APIError
+from .http import HTTPError
 
 
-async def ensure_network(client, name):
+async def ensure_network(docker, name):
     try:
-        await client.create_network(name, driver='bridge', check_duplicate=True)
-    except APIError as e:
-        err = e.response.json()
-        msg = 'network with name {} already exists'.format(name)
-        if 'message' in err and err['message'] == msg:
+        await docker.create_network(data={
+            'Name': name,
+            'Driver': 'bridge',
+            'CheckDuplicate': True,
+        })
+    except HTTPError as err:
+        if err.reason == 'Conflict':
             return
         raise

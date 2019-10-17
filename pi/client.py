@@ -113,30 +113,3 @@ class AsyncClient:
 
     def put_archive(self, *args, **kwargs):
         return self._exec(self._client.put_archive, *args, **kwargs)
-
-    def pause(self, *args, **kwargs):
-        return self._exec(self._client.pause, *args, **kwargs)
-
-    def commit(self, *args, **kwargs):
-        return self._exec(self._client.commit, *args, **kwargs)
-
-    def unpause(self, *args, **kwargs):
-        return self._exec(self._client.unpause, *args, **kwargs)
-
-    def stop(self, *args, **kwargs):
-        return self._exec(self._client.stop, *args, **kwargs)
-
-    def kill(self, *args, **kwargs):
-        return self._exec(self._client.kill, *args, **kwargs)
-
-    def wait(self, *args, **kwargs):
-        return self._exec(self._client.wait, *args, **kwargs)
-
-    def containers(self, *args, **kwargs):
-        return self._exec(self._client.containers, *args, **kwargs)
-
-    def create_network(self, *args, **kwargs):
-        return self._exec(self._client.create_network, *args, **kwargs)
-
-    def remove_image(self, *args, **kwargs):
-        return self._exec(self._client.remove_image, *args, **kwargs)

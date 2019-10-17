@@ -154,7 +154,7 @@ async def attach(docker, id_, *, loop):
         await http_proto.wait_closed()
 
 
-async def run(client, docker, tty, image, command, *, loop, init=None,
+async def run(docker, tty, image, command, *, loop, init=None,
               volumes=None, ports=None, environ=None, work_dir=None,
               network=None, network_alias=None):
     c = await start(docker, image, command, init=init, tty=tty,
@@ -164,7 +164,7 @@ async def run(client, docker, tty, image, command, *, loop, init=None,
     try:
         await docker.start(c['Id'])
         await attach(docker, c['Id'], loop=loop)
-        exit_code = await client.wait(c)
+        exit_code = await docker.wait(c['Id'])
         return exit_code['StatusCode']
     finally:
         await docker.remove_container(c['Id'],

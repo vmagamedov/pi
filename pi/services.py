@@ -6,8 +6,8 @@ def service_label(namespace: str, service: Service):
     return '{}-{}'.format(namespace, service.name)
 
 
-async def ensure_running(client, docker, namespace, services):
-    containers = await client.containers(all=True)
+async def ensure_running(docker, namespace, services):
+    containers = await docker.containers(params={'all': 'true'})
     for service in services:
         label = service_label(namespace, service)
         container = next(search_container(label, containers), None)

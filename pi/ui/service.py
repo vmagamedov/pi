@@ -25,7 +25,7 @@ async def service_start(env, name):
         sys.exit(-1)
 
     label = service_label(env.namespace, service)
-    containers = await env.client.containers(all=True)
+    containers = await env.docker.containers(params={'all': 'true'})
     container = next(search_container(label, containers), None)
     if container is not None:
         if container['State'] == 'running':
@@ -39,7 +39,7 @@ async def service_start(env, name):
         exec_ = sh_to_list(service.exec) if service.exec else None
         args = sh_to_list(service.args) if service.args else None
         di = docker_image(env, service.image)
-        await ensure_network(env.client, env.network)
+        await ensure_network(env.docker, env.network)
         await start_service(
             env.docker, di, args,
             entrypoint=exec_,
@@ -64,7 +64,7 @@ async def service_stop(env, name):
         sys.exit(-1)
 
     label = service_label(env.namespace, service)
-    all_containers = await env.client.containers(all=True)
+    all_containers = await env.docker.containers(params={'all': 'true'})
     containers = list(search_container(label, all_containers))
     if not containers:
         click.echo('Service was not started')
@@ -72,7 +72,7 @@ async def service_stop(env, name):
 
     for container in containers:
         if container['State'] == 'running':
-            await env.client.stop(container, timeout=3)
+            await env.docker.stop(container['Id'], params={'t': '3'})
         await env.docker.remove_container(container['Id'],
                                           params={'v': 'true', 'force': 'true'})
     click.echo('Service stopped')
@@ -82,7 +82,7 @@ async def service_stop(env, name):
 @click.pass_obj
 @async_cmd
 async def service_status(env):
-    containers = await env.client.containers(all=True)
+    containers = await env.docker.containers(params={'all': 'true'})
 
     running = set()
     exited = set()
