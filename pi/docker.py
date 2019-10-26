@@ -46,6 +46,8 @@ async def _request_json(method, path, data=None, *, _ok_statuses=None):
         if data is not None:
             await stream.send_data(json_data)
         response = await stream.recv_response()
+        if response.status_code == 204:
+            return None
         if response.status_code in _ok_statuses:
             return await _recv_json(stream, response)
         else:
@@ -66,6 +68,19 @@ async def _delete_json(path, *, _ok_statuses=None):
 
 
 class Docker:
+
+    @cached_property
+    def _docker_config(self):
+        return read_config()
+
+    async def _auth_header(self, image_name):
+        registry = server_name(image_name)
+        auth = await resolve_auth(self._docker_config, registry)
+        if auth is not None:
+            auth_header = encode_header(auth)
+            return auth_header
+        else:
+            return None
 
     async def images(self):
         return await _get_json('/images/json')
@@ -175,19 +190,6 @@ class Docker:
             else:
                 raise response.error()
 
-    @cached_property
-    def _docker_config(self):
-        return read_config()
-
-    async def _auth_header(self, name):
-        registry = server_name(name)
-        auth = await resolve_auth(self._docker_config, registry)
-        if auth is not None:
-            auth_header = encode_header(auth)
-            return auth_header
-        else:
-            return None
-
     async def create_image(self, *, params=None):
         uri = '/images/create'
         if params:
@@ -245,12 +247,12 @@ class Docker:
         uri = '/containers/{id}/stop'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        return await _post_json(uri)
+        await _post_json(uri)
 
     async def pause(self, id_):
         assert isinstance(id_, str), id_
         uri = '/containers/{id}/pause'.format(id=id_)
-        return await _post_json(uri)
+        await _post_json(uri)
 
     async def commit(self, *, params):
         uri = '/commit'
@@ -261,7 +263,7 @@ class Docker:
     async def unpause(self, id_):
         assert isinstance(id_, str), id_
         uri = '/containers/{id}/unpause'.format(id=id_)
-        return await _post_json(uri)
+        await _post_json(uri)
 
     async def create_network(self, *, data):
         uri = '/networks/create'
