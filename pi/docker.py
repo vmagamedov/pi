@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlencode
 
 from .http import connect
+from .auth import read_config, server_name, resolve_auth, encode_header
 from .utils import cached_property
-from ._requires.docker import auth
 
 
 CHUNK_SIZE = 65535
@@ -176,14 +176,15 @@ class Docker:
                 raise response.error()
 
     @cached_property
-    def _auth_config(self):
-        return auth.load_config()
+    def _docker_config(self):
+        return read_config()
 
-    def _auth_header(self, name):
-        registry, _ = auth.resolve_repository_name(name)
-        auth_header = self._auth_config.resolve_authconfig(registry)
-        if auth_header:
-            return auth.encode_header(auth_header)
+    async def _auth_header(self, name):
+        registry = server_name(name)
+        auth = await resolve_auth(self._docker_config, registry)
+        if auth is not None:
+            auth_header = encode_header(auth)
+            return auth_header
         else:
             return None
 
@@ -193,7 +194,7 @@ class Docker:
             uri += '?' + urlencode(params)
         headers = [('Host', 'localhost')]
         if 'fromImage' in params:
-            auth_header = self._auth_header(params['fromImage'])
+            auth_header = await self._auth_header(params['fromImage'])
             if auth_header:
                 headers.append(('X-Registry-Auth', auth_header))
 
@@ -211,7 +212,7 @@ class Docker:
         if params:
             uri += '?' + urlencode(params)
         headers = [('Host', 'localhost')]
-        auth_header = self._auth_header(name)
+        auth_header = await self._auth_header(name)
         if auth_header:
             headers.append(('X-Registry-Auth', auth_header))
 
