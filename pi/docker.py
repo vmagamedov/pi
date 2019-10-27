@@ -8,6 +8,9 @@ from .utils import cached_property
 from ._requires.docker import auth
 
 
+CHUNK_SIZE = 65535
+
+
 async def _recv_json(stream, response):
     content_type = response.headers.get(b'content-type')
     assert content_type == b'application/json', response
@@ -262,3 +265,27 @@ class Docker:
     async def create_network(self, *, data):
         uri = '/networks/create'
         return await _post_json(uri, data=data)
+
+    async def put_archive(self, id_, arch, *, params):
+        uri = '/containers/{id}/archive'.format(id=id_)
+        if params:
+            uri += '?' + urlencode(params)
+        headers = [
+            ('Host', 'localhost'),
+            ('transfer-encoding', 'chunked'),
+        ]
+        async with connect() as stream:
+            await stream.send_request('PUT', uri, headers, end_stream=False)
+            while True:
+                chunk = arch.read(CHUNK_SIZE)
+                if len(chunk) == CHUNK_SIZE:
+                    await stream.send_data(chunk, end_stream=False)
+                else:
+                    if chunk:
+                        await stream.send_data(chunk)
+                    else:
+                        await stream.end()
+                    break
+            response = await stream.recv_response()
+            if response.status_code != 200:
+                raise response.error()

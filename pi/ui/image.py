@@ -27,7 +27,6 @@ async def image_build(env, name):
     image = env.images.get(name)
     with Status() as status:
         failed = await resolve(
-            env.client,
             env.docker,
             env.images,
             env.services,

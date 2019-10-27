@@ -23,12 +23,6 @@ class Environ:
             return 'pi'
 
     @cached_property
-    def client(self):
-        from .client import AsyncClient
-
-        return AsyncClient(loop=self.loop)
-
-    @cached_property
     def docker(self):
         from .docker import Docker
 

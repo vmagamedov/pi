@@ -291,7 +291,7 @@ async def _exec(docker, id_, cmd):
     return exit_code
 
 
-async def build(client, docker, images_map, image, *, loop, status):
+async def build(docker, images_map, image, *, loop, status):
     version, = image_versions(images_map, [image])
     from_ = docker_image(images_map, image.from_)
 
@@ -347,7 +347,9 @@ async def build(client, docker, images_map, image, *, loop, status):
             for action, state in task_states.items():
                 if action not in submitted_states:
                     with open(state.result.file.name, 'rb') as tar:
-                        await client.put_archive(c, '/.pi', tar)
+                        await docker.put_archive(c['Id'], tar, params={
+                            'path': '/.pi',
+                        })
                     submitted_states.add(action)
 
             cmd = task_cmd(task, task_results)
