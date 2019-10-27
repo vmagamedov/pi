@@ -88,8 +88,8 @@ async def pull_worker(docker, queue, result_queue, *, status):
             log.exception('Failed to pull image')
             await result_queue.put((PULL_FAILED, dep))
         else:
-            status = PULL_DONE if result else PULL_FAILED
-            await result_queue.put((status, dep))
+            task_status = PULL_DONE if result else PULL_FAILED
+            await result_queue.put((task_status, dep))
 
 
 async def build_worker(client, docker, images_map, queue, result_queue, *,
@@ -103,8 +103,8 @@ async def build_worker(client, docker, images_map, queue, result_queue, *,
             log.exception('Failed to build image')
             await result_queue.put((BUILD_FAILED, dep))
         else:
-            status = BUILD_DONE if result else BUILD_FAILED
-            await result_queue.put((status, dep))
+            task_status = BUILD_DONE if result else BUILD_FAILED
+            await result_queue.put((task_status, dep))
 
 
 def build_deps_map(plain_deps):
