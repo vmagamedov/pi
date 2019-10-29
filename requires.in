@@ -1,5 +1,4 @@
 jinja2==2.9.6
-docker
 attrs
 click
 pyyaml

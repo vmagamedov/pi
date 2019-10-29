@@ -4,19 +4,10 @@
 #
 #    pip-compile requires.in
 #
-attrs==18.2.0
-certifi==2018.11.29       # via requests
-chardet==3.0.4            # via requests
+attrs==19.3.0
 click==7.0
-docker-pycreds==0.4.0     # via docker
-docker==3.7.0
-h11==0.8.1
-idna==2.8                 # via requests
+h11==0.9.0
 jinja2==2.9.6
-markupsafe==1.1.0         # via jinja2
-pyyaml==3.13
-requests==2.21.0          # via docker
-six==1.12.0               # via docker, docker-pycreds, websocket-client
-tabulate==0.8.3
-urllib3==1.24.1           # via requests
-websocket-client==0.54.0  # via docker
+markupsafe==1.1.1         # via jinja2
+pyyaml==5.1.2
+tabulate==0.8.5

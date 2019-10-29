@@ -22,12 +22,6 @@ requires:
 	sed -i.bak "s/name_re = _make_name_re()/name_re = re.compile(r'\\\\b[a-zA-Z_][a-zA-Z0-9_]*\\\\b')/g" pi/_requires/jinja2/lexer.py
 	rm pi/_requires/jinja2/lexer.py.bak
 
-	# fix hacky backward compatibility in Requests
-	> pi/_requires/requests/packages.py
-
-	# fix transitive import in Requests
-	echo "chardet = pi._requires.chardet" >> pi/_requires/requests/compat.py
-
 	rm -rf pi/_requires/h11/tests
 
 release: requires

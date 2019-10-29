@@ -114,7 +114,7 @@ class Image(MappingConstruct):
     repository = attr.ib()  # type: str
     from_ = attr.ib(default=None)  # type: Optional[Union[str, DockerImage]]
     # type: Sequence[Task]
-    tasks = attr.ib(default=tuple(), hash=False, convert=_convert_tasks)
+    tasks = attr.ib(default=tuple(), hash=False, converter=_convert_tasks)
     description = attr.ib(default=None)  # type: Optional[str]
 
     def accept(self, visitor):
