@@ -10,14 +10,14 @@ import unicodedata
 
 from pathlib import Path
 from asyncio import wait, Queue, Event, gather, FIRST_EXCEPTION, WriteTransport
-
+from urllib.parse import urlsplit
 from concurrent.futures import ProcessPoolExecutor
 
 from ._requires import attr
 from ._requires import jinja2
-from ._requires import requests
 
 from .run import StdIOProtocol
+from .http import connect_tcp
 from .types import ActionType
 from .utils import terminate
 from .images import docker_image, image_versions
@@ -62,15 +62,28 @@ class ActionState:
     error = attr.ib(default=None)
 
 
-def download(url, file_name, destination):
+async def download(url, file_name, destination):
+    url_parts = urlsplit(url)
+    secure = True if url_parts.scheme == 'https' else False
+    host, _, port = url_parts.netloc.partition(':')
+    if not port:
+        port = 443 if url_parts.scheme == 'https' else 80
+    else:
+        port = int(port)
+    path = url_parts.path
+    if url_parts.query:
+        path += '?' + url_parts.query
     with tempfile.NamedTemporaryFile() as tmp:
         with tarfile.open(file_name, mode='w:tar') as tar:
-            # downloaded = 0
-            response = requests.get(url)
-            response.raise_for_status()
-            for chunk in response.iter_content(64 * 1024):
-                tmp.write(chunk)
-                # downloaded += len(chunk)
+            async with connect_tcp(host, port, secure=secure) as stream:
+                await stream.send_request('GET', path, [
+                    ('Host', url_parts.netloc),
+                ])
+                response = await stream.recv_response()
+                if response.status_code != 200:
+                    response.error()
+                async for chunk in stream.recv_data_chunked():
+                    tmp.write(chunk)
             tmp.seek(0)
             tar.addfile(tar.gettarinfo(arcname=destination, fileobj=tmp),
                         fileobj=tmp)
@@ -175,9 +188,10 @@ class IOExecutor:
 
     async def download(self, action, state):
         try:
-            await self.loop.run_in_executor(
-                None,
-                download, action.url, state.result.file.name, state.result.uuid
+            await download(
+                action.url,
+                state.result.file.name,
+                state.result.uuid,
             )
         except Exception as err:
             state.error = str(err)

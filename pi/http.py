@@ -1,3 +1,4 @@
+import ssl
 import socket
 import asyncio
 from asyncio import Event
@@ -194,12 +195,25 @@ class HTTPProtocol(asyncio.Protocol):
 
 
 @asynccontextmanager
-async def connect(*, stdin_proto=None, stdout_proto=None):
+async def connect_unix(*, stdin_proto=None, stdout_proto=None):
     loop = asyncio.get_running_loop()
     transport, protocol = await loop.create_unix_connection(
         lambda: HTTPProtocol(stdin_proto=stdin_proto,
                              stdout_proto=stdout_proto),
         '/var/run/docker.sock',
+    )
+    try:
+        yield cast(HTTPProtocol, protocol).stream
+    finally:
+        transport.close()
+
+
+@asynccontextmanager
+async def connect_tcp(host, port, *, secure=False):
+    loop = asyncio.get_running_loop()
+    ssl_context = ssl.create_default_context() if secure else None
+    transport, protocol = await loop.create_connection(
+        HTTPProtocol, host, port, ssl=ssl_context,
     )
     try:
         yield cast(HTTPProtocol, protocol).stream

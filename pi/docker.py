@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from urllib.parse import urlencode
 
-from .http import connect
+from .http import connect_unix
 from .auth import read_config, server_name, resolve_auth, encode_header
 from .utils import cached_property
 
@@ -32,7 +32,7 @@ async def _recv_json(stream, response):
 async def _request_json(method, path, data=None, *, _ok_statuses=None):
     if _ok_statuses is None:
         _ok_statuses = frozenset({200, 201, 204})
-    async with connect() as stream:
+    async with connect_unix() as stream:
         headers = [
             ('Host', 'localhost'),
             ('Connection', 'close'),
@@ -96,7 +96,7 @@ class Docker:
         uri = '/containers/{id}/resize'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect() as stream:
+        async with connect_unix() as stream:
             await stream.send_request('POST', uri, [
                 ('Host', 'localhost'),
             ])
@@ -111,7 +111,7 @@ class Docker:
         uri = '/containers/{id}/start'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect() as stream:
+        async with connect_unix() as stream:
             await stream.send_request('POST', uri, [
                 ('Host', 'localhost'),
             ])
@@ -132,7 +132,7 @@ class Docker:
     async def exec_start(self, id_, spec, stdin_proto, stdout_proto):
         assert isinstance(id_, str), id_
         uri = '/exec/{id}/start'.format(id=id_)
-        async with connect(
+        async with connect_unix(
             stdin_proto=stdin_proto, stdout_proto=stdout_proto
         ) as stream:
             json_data = json.dumps(spec).encode('utf-8')
@@ -161,7 +161,7 @@ class Docker:
         uri = '/containers/{id}/attach'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect(
+        async with connect_unix(
             stdin_proto=stdin_proto, stdout_proto=stdout_proto
         ) as stream:
             await stream.send_request('POST', uri, [
@@ -180,7 +180,7 @@ class Docker:
         uri = '/containers/{id}'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect() as stream:
+        async with connect_unix() as stream:
             await stream.send_request('DELETE', uri, [
                 ('Host', 'localhost'),
             ])
@@ -200,7 +200,7 @@ class Docker:
             if auth_header:
                 headers.append(('X-Registry-Auth', auth_header))
 
-        async with connect() as stream:
+        async with connect_unix() as stream:
             await stream.send_request('POST', uri, headers)
             response = await stream.recv_response()
             if response.status_code == 200:
@@ -218,7 +218,7 @@ class Docker:
         if auth_header:
             headers.append(('X-Registry-Auth', auth_header))
 
-        async with connect() as stream:
+        async with connect_unix() as stream:
             await stream.send_request('POST', uri, headers)
             response = await stream.recv_response()
             if response.status_code == 200:
@@ -277,7 +277,7 @@ class Docker:
             ('Host', 'localhost'),
             ('transfer-encoding', 'chunked'),
         ]
-        async with connect() as stream:
+        async with connect_unix() as stream:
             await stream.send_request('PUT', uri, headers, end_stream=False)
             while True:
                 chunk = arch.read(CHUNK_SIZE)
