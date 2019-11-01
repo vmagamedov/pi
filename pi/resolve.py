@@ -7,10 +7,10 @@ from collections import defaultdict
 
 from ._requires import attr
 
+from . import images
 from .utils import MessageType, terminate
 from .types import DockerImage
-from .images import pull as pull_image, image_versions
-from .images import build as build_image
+from .tasks import build_image
 
 
 log = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class ImagesCollector:
             self._deps.add(Dep(None, image))
         else:
             image = self._images_map.get(image)
-            version, = image_versions(self._images_map, [image])
+            version, = images.image_versions(self._images_map, [image])
             self._deps.add(Dep(image, DockerImage.from_image(image, version)))
             if image.from_ is not None:
                 self.add(image.from_)
@@ -84,7 +84,7 @@ async def pull_worker(docker, queue, result_queue, *, status):
             await result_queue.put((PULL_FAILED, dep))
             continue
         try:
-            result = await pull_image(docker, dep.docker_image, status=status)
+            result = await images.pull(docker, dep.docker_image, status=status)
         except Exception:
             log.exception('Failed to pull image')
             await result_queue.put((PULL_FAILED, dep))

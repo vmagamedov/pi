@@ -160,10 +160,3 @@ async def push(docker, docker_image_, *, status):
         return False
     else:
         return True
-
-
-async def build(docker, images_map, image, *, status):
-    from .tasks import build as build_tasks
-
-    result = await build_tasks(docker, images_map, image, status=status)
-    return result

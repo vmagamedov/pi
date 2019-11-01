@@ -8,7 +8,6 @@ import hashlib
 import asyncio
 import tempfile
 import unicodedata
-
 from pathlib import Path
 from asyncio import wait, Queue, Event, gather, FIRST_EXCEPTION, WriteTransport
 from urllib.parse import urlsplit
@@ -16,7 +15,6 @@ from concurrent.futures import ProcessPoolExecutor
 
 from ._requires import attr
 from ._requires import jinja2
-
 from .run import StdIOProtocol
 from .http import connect_tcp
 from .types import ActionType
@@ -301,7 +299,7 @@ async def _exec(docker, id_, cmd):
     return exit_code
 
 
-async def build(docker, images_map, image, *, status):
+async def build_image(docker, images_map, image, *, status):
     loop = asyncio.get_running_loop()
     version, = image_versions(images_map, [image])
     from_ = docker_image(images_map, image.from_)

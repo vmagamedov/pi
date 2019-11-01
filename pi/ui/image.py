@@ -7,7 +7,7 @@ from collections import Counter, namedtuple
 from ..run import run
 from ..types import DockerImage, Mode, LocalPath
 from ..utils import format_size
-from ..images import pull as pull_image, push as push_image, docker_image
+from ..images import pull, push, docker_image
 from ..images import image_versions
 from ..status import Status
 from ..console import pretty, config_tty
@@ -71,7 +71,7 @@ async def image_info(env, name, repo_tag):
 async def image_pull(env, name):
     image = _get_image(env.images, name)
     with Status() as status:
-        success = await pull_image(env.docker, image, status=status)
+        success = await pull(env.docker, image, status=status)
     if not success:
         click.echo('Unable to pull image {}'.format(image.name))
         sys.exit(1)
@@ -83,7 +83,7 @@ async def image_pull(env, name):
 async def image_push(env, name):
     image = _get_image(env.images, name)
     with Status() as status:
-        success = await push_image(env.docker, image, status=status)
+        success = await push(env.docker, image, status=status)
     if not success:
         click.echo('Unable to push image {}'.format(image.name))
         sys.exit(1)
