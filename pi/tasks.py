@@ -5,6 +5,7 @@ import math
 import uuid
 import tarfile
 import hashlib
+import asyncio
 import tempfile
 import unicodedata
 
@@ -135,21 +136,20 @@ def iter_actions(task):
             yield value
 
 
-def get_action_states(tasks, *, loop):
+def get_action_states(tasks):
     actions = {}
     for task in tasks:
         for action in iter_actions(task):
             if action in actions:
                 continue
             result = Result(tempfile.NamedTemporaryFile())
-            actions[action] = ActionState(Event(loop=loop), result)
+            actions[action] = ActionState(Event(), result)
     return actions
 
 
-async def wait_actions(states, *, loop):
+async def wait_actions(states):
     if states:
-        await gather(*[state.complete.wait() for state in states.values()],
-                     loop=loop)
+        await gather(*[state.complete.wait() for state in states.values()])
 
 
 class ActionDispatcher:
@@ -180,9 +180,6 @@ class ActionDispatcher:
 
 class IOExecutor:
 
-    def __init__(self, *, loop):
-        self.loop = loop
-
     def visit(self, action):
         return action.accept(self)
 
@@ -205,16 +202,15 @@ class IOExecutor:
 
 class CPUExecutor:
 
-    def __init__(self, process_pool, *, loop):
+    def __init__(self, process_pool):
         self.process_pool = process_pool
-        self.loop = loop
 
     def visit(self, action):
         return action.accept(self)
 
     async def file(self, action, state):
         try:
-            await self.loop.run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 self.process_pool,
                 file_, action.path, state.result.file.name, state.result.uuid
             )
@@ -225,7 +221,7 @@ class CPUExecutor:
 
     async def bundle(self, action, state):
         try:
-            await self.loop.run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 self.process_pool,
                 bundle, action.path, state.result.file.name, state.result.uuid
             )
@@ -248,16 +244,16 @@ async def worker(queue, executor):
         await process(action, state)
 
 
-async def pool(queue, executor, concurrency=2, *, loop):
+async def pool(queue, executor, concurrency=2):
+    loop = asyncio.get_running_loop()
     pending = [loop.create_task(worker(queue, executor))
                for _ in range(concurrency)]
     try:
         # fast exit on first error
-        _, pending = await wait(pending, loop=loop,
-                                return_when=FIRST_EXCEPTION)
+        _, pending = await wait(pending, return_when=FIRST_EXCEPTION)
     finally:
         for task in pending:
-            await terminate(task, loop=loop)
+            await terminate(task)
 
 
 def task_cmd(task, results):
@@ -305,7 +301,8 @@ async def _exec(docker, id_, cmd):
     return exit_code
 
 
-async def build(docker, images_map, image, *, loop, status):
+async def build(docker, images_map, image, *, status):
+    loop = asyncio.get_running_loop()
     version, = image_versions(images_map, [image])
     from_ = docker_image(images_map, image.from_)
 
@@ -313,17 +310,17 @@ async def build(docker, images_map, image, *, loop, status):
                                .format(image.repository, version, image.name))
 
     io_queue = Queue()
-    io_executor = IOExecutor(loop=loop)
+    io_executor = IOExecutor()
 
     process_pool = ProcessPoolExecutor()
     cpu_queue = Queue()
-    cpu_executor = CPUExecutor(process_pool, loop=loop)
+    cpu_executor = CPUExecutor(process_pool)
 
-    states = get_action_states(image.tasks, loop=loop)
+    states = get_action_states(image.tasks)
     submitted_states = set()
 
-    io_pool_task = loop.create_task(pool(io_queue, io_executor, loop=loop))
-    cpu_pool_task = loop.create_task(pool(cpu_queue, cpu_executor, loop=loop))
+    io_pool_task = loop.create_task(pool(io_queue, io_executor))
+    cpu_pool_task = loop.create_task(pool(cpu_queue, cpu_executor))
 
     c = await docker.create_container({
         'Image': from_.name,
@@ -347,7 +344,7 @@ async def build(docker, images_map, image, *, loop, status):
             task_states = {action: states[action]
                            for action in iter_actions(task)}
 
-            await wait_actions(task_states, loop=loop)
+            await wait_actions(task_states)
 
             errors = {action: state.error
                       for action, state in task_states.items()
@@ -389,8 +386,8 @@ async def build(docker, images_map, image, *, loop, status):
         return True
 
     finally:
-        await terminate(io_pool_task, loop=loop)
-        await terminate(cpu_pool_task, loop=loop)
+        await terminate(io_pool_task)
+        await terminate(cpu_pool_task)
         process_pool.shutdown()
         for state in states.values():
             state.result.close()

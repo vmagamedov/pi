@@ -9,13 +9,12 @@ from ..run import run
 from ..types import CommandType, LocalPath, Mode
 from ..images import docker_image
 from ..status import Status
-from ..environ import async_cmd
 from ..console import config_tty
 from ..network import ensure_network
 from ..resolve import resolve
 from ..services import ensure_running
 
-from .common import ProxyCommand
+from .common import AsyncProxyCommand, AsyncCommand
 
 
 def create_groups(groups_parts):
@@ -109,7 +108,6 @@ async def _callback(command, env, **params):
             env.images,
             env.services,
             command,
-            loop=env.loop,
             status=status,
             pull=True,
             build=True,
@@ -132,7 +130,6 @@ async def _callback(command, env, **params):
     with config_tty() as tty:
         exit_code = await run(
             env.docker, tty, di, command_run,
-            loop=env.loop,
             init=True,
             volumes=volumes,
             ports=command.ports,
@@ -150,20 +147,19 @@ def create_command(name, command):
         short_help = _get_short_help(command.description)
 
     callback = partial(_callback, command)
-    callback = async_cmd(callback)
     callback = click.pass_obj(callback)
 
     if isinstance(command.run, str):
         params_creator = _ParameterCreator()
         params = [params_creator.visit(param)
                   for param in (command.params or [])]
-        return click.Command(name, params=params, callback=callback,
-                             help=command.description,
-                             short_help=short_help)
-    else:
-        return ProxyCommand(name, callback=callback,
+        return AsyncCommand(name, params=params, callback=callback,
                             help=command.description,
                             short_help=short_help)
+    else:
+        return AsyncProxyCommand(name, callback=callback,
+                                 help=command.description,
+                                 short_help=short_help)
 
 
 def create_commands_cli(config):

@@ -6,18 +6,16 @@ from .._requires.tabulate import tabulate
 from ..run import start_service
 from ..utils import search_container, sh_to_list
 from ..images import docker_image
-from ..environ import async_cmd
 from ..network import ensure_network
 from ..console import pretty
 from ..services import get_volumes, service_label
 
-from .common import ExtGroup
+from .common import ExtGroup, AsyncCommand
 
 
-@click.command('start', help='Start service')
+@click.command('start', help='Start service', cls=AsyncCommand)
 @click.argument('name')
 @click.pass_obj
-@async_cmd
 async def service_start(env, name):
     service = env.services.get(name, None)
     if service is None:
@@ -53,10 +51,9 @@ async def service_start(env, name):
         click.echo('Service started')
 
 
-@click.command('stop', help='Stop service')
+@click.command('stop', help='Stop service', cls=AsyncCommand)
 @click.argument('name')
 @click.pass_obj
-@async_cmd
 async def service_stop(env, name):
     service = env.services.get(name, None)
     if service is None:
@@ -78,9 +75,8 @@ async def service_stop(env, name):
     click.echo('Service stopped')
 
 
-@click.command('status', help='Display services status')
+@click.command('status', help='Display services status', cls=AsyncCommand)
 @click.pass_obj
-@async_cmd
 async def service_status(env):
     containers = await env.docker.containers(params={'all': 'true'})
 

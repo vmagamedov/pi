@@ -133,7 +133,8 @@ class StdIOProtocol(asyncio.Protocol):
         self.http_proto.transport.write(data)
 
 
-async def attach(docker, id_, *, loop):
+async def attach(docker, id_):
+    loop = asyncio.get_running_loop()
     stdin_proto = StdIOProtocol()
     await loop.connect_read_pipe(lambda: stdin_proto, sys.stdin)
     stdin_proto.transport.pause_reading()
@@ -154,7 +155,7 @@ async def attach(docker, id_, *, loop):
         await http_proto.wait_closed()
 
 
-async def run(docker, tty, image, command, *, loop, init=None,
+async def run(docker, tty, image, command, *, init=None,
               volumes=None, ports=None, environ=None, work_dir=None,
               network=None, network_alias=None):
     c = await start(docker, image, command, init=init, tty=tty,
@@ -163,7 +164,7 @@ async def run(docker, tty, image, command, *, loop, init=None,
                     network=network, network_alias=network_alias)
     try:
         await docker.start(c['Id'])
-        await attach(docker, c['Id'], loop=loop)
+        await attach(docker, c['Id'])
         exit_code = await docker.wait(c['Id'])
         return exit_code['StatusCode']
     finally:

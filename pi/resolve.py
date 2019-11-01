@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from asyncio import Queue
@@ -92,13 +93,12 @@ async def pull_worker(docker, queue, result_queue, *, status):
             await result_queue.put((task_status, dep))
 
 
-async def build_worker(docker, images_map, queue, result_queue, *,
-                       loop, status):
+async def build_worker(docker, images_map, queue, result_queue, *, status):
     while True:
         dep = await queue.get()
         try:
             result = await build_image(docker, images_map, dep.image,
-                                       loop=loop, status=status)
+                                       status=status)
         except Exception:
             log.exception('Failed to build image')
             await result_queue.put((BUILD_FAILED, dep))
@@ -171,8 +171,9 @@ def mark_failed(deps_map, in_work, item):
     return failed
 
 
-async def resolve(docker, images_map, services_map, obj, *, loop,
+async def resolve(docker, images_map, services_map, obj, *,
                   status, pull=False, build=False, fail_fast=False):
+    loop = asyncio.get_running_loop()
     deps = ImagesCollector.collect(images_map, services_map, obj)
     missing = await check(docker, deps)
     if not missing or not (pull or build):
@@ -193,7 +194,7 @@ async def resolve(docker, images_map, services_map, obj, *, loop,
     )
     builder_task = loop.create_task(
         build_worker(docker, images_map, build_queue, result_queue,
-                     loop=loop, status=status)
+                     status=status)
     )
     try:
         while deps_map or in_work:
@@ -226,6 +227,6 @@ async def resolve(docker, images_map, services_map, obj, *, loop,
                     deps_map.clear()
 
     finally:
-        await terminate(puller_task, loop=loop)
-        await terminate(builder_task, loop=loop)
+        await terminate(puller_task)
+        await terminate(builder_task)
     return failed

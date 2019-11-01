@@ -1,7 +1,6 @@
 import sys
 import math
 import shlex
-import signal
 import asyncio
 
 from collections import Sequence
@@ -100,38 +99,10 @@ def sh_to_list(args):
         return args
 
 
-def _sig_handler(sig_num, task):
-    msg = 'Interrupted' if sig_num == signal.SIGINT else 'Aborted'
-    sys.stderr.write('\n{}!\n'.format(msg))
-    task.cancel()
-
-
-def async_func(*, signals=(signal.SIGINT, signal.SIGTERM), exit_code=1):
-    def decorator(coro_func):
-        assert asyncio.iscoroutinefunction(coro_func), type(coro_func)
-
-        def wrapper(*args, loop, **kwargs):
-            task = loop.create_task(coro_func(*args, loop=loop, **kwargs))
-            for sig_num in signals:
-                loop.add_signal_handler(sig_num, _sig_handler, sig_num, task)
-            try:
-                loop.run_until_complete(task)
-            except asyncio.CancelledError:
-                sys.exit(exit_code)
-            except BaseException:
-                raise task.exception()
-            finally:
-                for sig_num in signals:
-                    loop.remove_signal_handler(sig_num)
-
-        return wrapper
-    return decorator
-
-
-async def terminate(task, *, loop, wait=1):
+async def terminate(task, *, wait=1):
     task.cancel()
     try:
-        await asyncio.wait_for(task, wait, loop=loop)
+        await asyncio.wait_for(task, wait)
     except asyncio.CancelledError:
         pass
 

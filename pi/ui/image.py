@@ -11,18 +11,16 @@ from ..images import pull as pull_image, push as push_image, docker_image
 from ..images import image_versions
 from ..status import Status
 from ..console import pretty, config_tty
-from ..environ import async_cmd
 from ..resolve import resolve
 
 from .._requires import click
 
-from .common import ExtGroup
+from .common import ExtGroup, AsyncCommand
 
 
-@click.command('build', help='Build image')
+@click.command('build', help='Build image', cls=AsyncCommand)
 @click.argument('name')
 @click.pass_obj
-@async_cmd
 async def image_build(env, name):
     image = env.images.get(name)
     with Status() as status:
@@ -31,7 +29,6 @@ async def image_build(env, name):
             env.images,
             env.services,
             image,
-            loop=env.loop,
             status=status,
             pull=True,
             build=True,
@@ -50,11 +47,10 @@ def _get_image(images_map, name):
         return docker_image(images_map, image.name)
 
 
-@click.command('info', help='Show image info')
+@click.command('info', help='Show image info', cls=AsyncCommand)
 @click.argument('name')
 @click.option('--repo-tag', is_flag=True)
 @click.pass_obj
-@async_cmd
 async def image_info(env, name, repo_tag):
     try:
         image = env.images.get(name)
@@ -69,10 +65,9 @@ async def image_info(env, name, repo_tag):
         sys.exit(1)
 
 
-@click.command('pull', help='Pull image version')
+@click.command('pull', help='Pull image version', cls=AsyncCommand)
 @click.argument('name')
 @click.pass_obj
-@async_cmd
 async def image_pull(env, name):
     image = _get_image(env.images, name)
     with Status() as status:
@@ -82,10 +77,9 @@ async def image_pull(env, name):
         sys.exit(1)
 
 
-@click.command('push', help='Push image version')
+@click.command('push', help='Push image version', cls=AsyncCommand)
 @click.argument('name')
 @click.pass_obj
-@async_cmd
 async def image_push(env, name):
     image = _get_image(env.images, name)
     with Status() as status:
@@ -95,29 +89,26 @@ async def image_push(env, name):
         sys.exit(1)
 
 
-@click.command('run', help='Run command in container')
+@click.command('run', help='Run command in container', cls=AsyncCommand)
 @click.argument('name')
 @click.argument('args', nargs=-1, required=True)
 @click.pass_obj
-@async_cmd
 async def image_run(env, name, args):
     image = _get_image(env.images, name)
     volumes = [LocalPath('.', '.', Mode.RW)]
 
     with config_tty() as tty:
         exit_code = await run(env.docker, tty, image, args,
-                              loop=env.loop, volumes=volumes,
-                              work_dir='.')
+                              volumes=volumes, work_dir='.')
         sys.exit(exit_code)
 
 
 _Tag = namedtuple('_Tag', 'value created')
 
 
-@click.command('gc', help='Remove old images')
+@click.command('gc', help='Remove old images', cls=AsyncCommand)
 @click.argument('count', type=click.INT, default=1)
 @click.pass_obj
-@async_cmd
 async def image_gc(env, count):
     if count < 0:
         click.echo('Count should be more or equal to 0')
@@ -165,9 +156,8 @@ async def _get_images_info(env):
     return available, counts, sizes
 
 
-@click.command('list', help='List images')
+@click.command('list', help='List images', cls=AsyncCommand)
 @click.pass_obj
-@async_cmd
 async def image_list(env):
     from .._requires.tabulate import tabulate
 

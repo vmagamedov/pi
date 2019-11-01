@@ -55,10 +55,10 @@ async def test_download(loop):
     try:
         action = Download(url)
         task = Task('whatever', where={'slaw': action})
-        states = get_action_states([task], loop=loop)
+        states = get_action_states([task])
         state = states[action]
         with closing(state.result):
-            executor = IOExecutor(loop=loop)
+            executor = IOExecutor()
             process = executor.visit(action)
             await process(action, state)
             with tarfile.open(state.result.file.name) as tmp_tar:
@@ -76,11 +76,11 @@ async def test_file(loop):
         content = f.read()
     action = File(file_path)
     task = Task('whatever', where={'ardeche': action})
-    states = get_action_states([task], loop=loop)
+    states = get_action_states([task])
     state = states[action]
     with closing(state.result):
         with ProcessPoolExecutor() as process_pool:
-            executor = CPUExecutor(process_pool, loop=loop)
+            executor = CPUExecutor(process_pool)
             process = executor.visit(action)
             await process(action, state)
             with tarfile.open(state.result.file.name) as tmp_tar:
@@ -93,11 +93,11 @@ async def test_file(loop):
 async def test_bundle(loop):
     action = Bundle('tests/stub-l1')
     task = Task('whatever', where={'twihard': action})
-    states = get_action_states([task], loop=loop)
+    states = get_action_states([task])
     state = states[action]
     with closing(state.result):
         with ProcessPoolExecutor() as process_pool:
-            executor = CPUExecutor(process_pool, loop=loop)
+            executor = CPUExecutor(process_pool)
             process = executor.visit(action)
             await process(action, state)
             with tarfile.open(state.result.file.name) as tmp:
