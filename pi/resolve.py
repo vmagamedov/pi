@@ -205,24 +205,24 @@ async def resolve(docker, images_map, services_map, obj, *,
                 mark_working(deps_map, in_work, item)
                 await init_queue.put(item)
 
-            result, image = await result_queue.get()
+            result, dep = await result_queue.get()
 
             if result is PULL_DONE:
-                mark_done(deps_map, in_work, image)
+                mark_done(deps_map, in_work, dep)
 
             elif result is PULL_FAILED:
-                if build:
-                    await build_queue.put(image)
+                if build and dep.image is not None:
+                    await build_queue.put(dep)
                 else:
-                    failed.extend(mark_failed(deps_map, in_work, image))
+                    failed.extend(mark_failed(deps_map, in_work, dep))
                     if fail_fast:
                         deps_map.clear()
 
             elif result is BUILD_DONE:
-                mark_done(deps_map, in_work, image)
+                mark_done(deps_map, in_work, dep)
 
             elif result is BUILD_FAILED:
-                failed.extend(mark_failed(deps_map, in_work, image))
+                failed.extend(mark_failed(deps_map, in_work, dep))
                 if fail_fast:
                     deps_map.clear()
 
