@@ -6,7 +6,6 @@ import asyncio
 from ._requires import click
 
 from .http import HTTPError
-from .utils import sh_to_list
 
 
 log = logging.getLogger(__name__)
@@ -60,7 +59,7 @@ async def start(docker, image, command, *, init=None, tty=True,
                 work_dir=None, network=None, network_alias=None, label=None):
     spec = {
         'Image': image.name,
-        'Cmd': sh_to_list(command),
+        'Cmd': command,
         'OpenStdin': True,
         'Tty': tty,
     }
