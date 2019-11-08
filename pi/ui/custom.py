@@ -103,7 +103,7 @@ async def _start_services(env, command):
 
 async def _callback(command, env, **params):
     with Status() as status:
-        await resolve(
+        failed = await resolve(
             env.docker,
             env.images,
             env.services,
@@ -112,6 +112,10 @@ async def _callback(command, env, **params):
             pull=True,
             build=True,
         )
+    if failed:
+        click.echo('Failed to resolve dependencies')
+        sys.exit(1)
+
     await _start_services(env, command)
     await ensure_network(env.docker, env.network)
 
