@@ -48,10 +48,15 @@ def _exposed_ports(ports):
     return {'{}/{}'.format(p.port, p.proto): {} for p in ports}
 
 
+def _bind_to(port):
+    return [{'HostPort': str(port.as_), 'HostIp': port.addr}]
+
+
 def _port_binds(ports):
-    return {'{}/{}'.format(e.port, e.proto): {'HostPort': e.as_,
-                                              'HostIp': e.addr}
-            for e in ports}
+    return {
+        '{}/{}'.format(port.port, port.proto): _bind_to(port)
+        for port in ports
+    }
 
 
 async def start(docker, image, command, *, init=None, tty=True,
