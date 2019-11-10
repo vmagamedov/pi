@@ -8,13 +8,15 @@ import hashlib
 import asyncio
 import tempfile
 import unicodedata
+from typing import Optional
 from pathlib import Path
 from asyncio import wait, Queue, Event, gather, FIRST_EXCEPTION, WriteTransport
+from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 from concurrent.futures import ProcessPoolExecutor
 
-from ._requires import attr
 from ._requires import jinja2
+
 from .run import StdIOProtocol
 from .http import connect_tcp
 from .types import ActionType
@@ -22,19 +24,10 @@ from .utils import terminate
 from .images import docker_image, image_versions
 
 
-class ResultBase:
-
-    def value(self):
-        raise NotImplementedError
-
-    def close(self):
-        raise NotImplementedError
-
-
-@attr.s
-class Result(ResultBase):
-    file = attr.ib()
-    uuid = attr.ib(default=attr.Factory(lambda: uuid.uuid4().hex))
+@dataclass
+class Result:
+    file: tempfile.NamedTemporaryFile
+    uuid: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def value(self):
         return hashlib.sha1(self.file.name.encode('utf-8')).hexdigest()
@@ -43,22 +36,11 @@ class Result(ResultBase):
         self.file.close()
 
 
-@attr.s
-class SimpleResult(ResultBase):
-    content = attr.ib()
-
-    def value(self):
-        return self.content
-
-    def close(self):
-        pass
-
-
-@attr.s
+@dataclass
 class ActionState:
-    complete = attr.ib()
-    result = attr.ib()
-    error = attr.ib(default=None)
+    complete: Event
+    result: Result
+    error: Optional[str] = None
 
 
 async def download(url, file_name, destination):
@@ -304,7 +286,7 @@ async def build_image(docker, images_map, image, *, status):
     version, = image_versions(images_map, [image])
     from_ = docker_image(images_map, image.from_)
 
-    task_key = status.add_task('==> Building image {}:{} ({})'
+    task_key = status.add_task('=> Building image {}:{} ({})'
                                .format(image.repository, version, image.name))
 
     io_queue = Queue()

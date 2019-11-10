@@ -6,7 +6,7 @@ from .._requires import click
 from .._requires import jinja2
 
 from ..run import run
-from ..types import CommandType, LocalPath, Mode
+from ..types import Command, LocalPath, Mode
 from ..images import docker_image
 from ..status import Status
 from ..console import config_tty
@@ -170,7 +170,7 @@ def create_commands_cli(config):
     groups_set = set()
     commands_map = dict()
 
-    commands = [i for i in config if isinstance(i, CommandType)]
+    commands = [i for i in config if isinstance(i, Command)]
     for command in commands:
         command_path = tuple(command.name.split())
         group_parts, command_name = command_path[:-1], command_path[-1]

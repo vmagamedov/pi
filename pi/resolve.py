@@ -1,11 +1,11 @@
 import asyncio
 import logging
 
+from typing import Optional
 from asyncio import Queue
 from itertools import chain
 from collections import defaultdict
-
-from ._requires import attr
+from dataclasses import dataclass
 
 from . import images
 from .utils import MessageType, terminate
@@ -16,10 +16,10 @@ from .tasks import build_image
 log = logging.getLogger(__name__)
 
 
-@attr.s(hash=True)
+@dataclass(frozen=True)
 class Dep:
-    image = attr.ib()
-    docker_image = attr.ib()
+    image: Optional[str]
+    docker_image: DockerImage
 
 
 class ImagesCollector:
