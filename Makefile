@@ -7,7 +7,6 @@ requires.txt:
 	pip-compile requires.in
 
 requires:
-	rm -rf ./*.egg-info
 	rm -rf pi/_requires/*
 	touch pi/_requires/__init__.py
 	pip3 install --disable-pip-version-check --no-deps -t pi/_requires -r requires.txt
@@ -22,6 +21,7 @@ requires:
 	sed -i.bak -e '48,53d' pi/_requires/jinja2/lexer.py
 	rm pi/_requires/jinja2/lexer.py.bak
 
+	rm -rf pi/_requires/bin
 	rm -rf pi/_requires/h11/tests
 
 release: requires
