@@ -277,7 +277,8 @@ async def _exec(docker, id_, cmd):
     exit_code = info['ExitCode']
     if exit_code:
         # FIXME: proper output
-        print(stdout_buffer.dump().decode('utf-8'), file=sys.stderr)
+        print(stdout_buffer.dump().decode('utf-8', 'backslashreplace'),
+              file=sys.stderr)
     return exit_code
 
 
