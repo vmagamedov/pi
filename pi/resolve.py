@@ -142,7 +142,7 @@ def build_deps_map(plain_deps):
 
 async def check(client, dependencies):
     available_images = await client.images()
-    repo_tags = set(chain.from_iterable(i['RepoTags']
+    repo_tags = set(chain.from_iterable(i['RepoTags'] or []
                                         for i in available_images))
     missing = [d for d in dependencies
                if d.docker_image.name not in repo_tags]
