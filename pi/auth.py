@@ -12,6 +12,8 @@ _PREFIX = 'docker-credential-'
 
 def read_config():
     path = os.path.expanduser('~/.docker/config.json')
+    if not os.path.exists(path):
+        return {}
     with codecs.open(path, encoding='utf-8') as f:
         json_data = f.read()
     return json.loads(json_data)
