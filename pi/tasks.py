@@ -4,6 +4,7 @@ import sys
 import math
 import uuid
 import tarfile
+import logging
 import hashlib
 import asyncio
 import tempfile
@@ -22,6 +23,9 @@ from .http import connect_tcp
 from .types import ActionType
 from .utils import terminate
 from .images import docker_image, image_versions
+
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,28 +47,50 @@ class ActionState:
     error: Optional[str] = None
 
 
-async def download(url, file_name, destination):
-    url_parts = urlsplit(url)
-    secure = True if url_parts.scheme == 'https' else False
-    host, _, port = url_parts.netloc.partition(':')
-    if not port:
-        port = 443 if url_parts.scheme == 'https' else 80
+async def _download(url, output, *, _max_redirects=5):
+    redirects = 0
+    initial_url = url
+    initial_secure = None
+    while redirects < _max_redirects:
+        url_parts = urlsplit(url)
+
+        secure = True if url_parts.scheme == 'https' else False
+        if redirects == 0:
+            initial_secure = secure
+        if initial_secure is True and secure is False:
+            raise Exception(f'Redirect to insecure url: {url}')
+
+        host, _, port = url_parts.netloc.partition(':')
+        if not port:
+            port = 443 if url_parts.scheme == 'https' else 80
+        else:
+            port = int(port)
+        path = url_parts.path
+        if url_parts.query:
+            path += '?' + url_parts.query
+
+        async with connect_tcp(host, port, secure=secure) as stream:
+            await stream.send_request('GET', path, [
+                ('host', url_parts.netloc),
+            ])
+            response = await stream.recv_response()
+            if response.status_code in {301, 302}:
+                url = response.headers[b'location'].decode('ascii')
+                redirects += 1
+                continue
+            elif response.status_code != 200:
+                response.error()
+            async for chunk in stream.recv_data_chunked():
+                output.write(chunk)
+            break
     else:
-        port = int(port)
-    path = url_parts.path
-    if url_parts.query:
-        path += '?' + url_parts.query
+        raise Exception(f'More than {_max_redirects} redirects: {initial_url}')
+
+
+async def download(url, file_name, destination):
     with tempfile.NamedTemporaryFile() as tmp:
         with tarfile.open(file_name, mode='w:tar') as tar:
-            async with connect_tcp(host, port, secure=secure) as stream:
-                await stream.send_request('GET', path, [
-                    ('Host', url_parts.netloc),
-                ])
-                response = await stream.recv_response()
-                if response.status_code != 200:
-                    response.error()
-                async for chunk in stream.recv_data_chunked():
-                    tmp.write(chunk)
+            await _download(url, tmp)
             tmp.seek(0)
             tar.addfile(tar.gettarinfo(arcname=destination, fileobj=tmp),
                         fileobj=tmp)
@@ -171,6 +197,7 @@ class IOExecutor:
                 state.result.uuid,
             )
         except Exception as err:
+            log.debug('Download action failed: %r', action, exc_info=True)
             state.error = str(err)
             raise
         finally:
@@ -195,6 +222,7 @@ class CPUExecutor:
                 file_, action.path, state.result.file.name, state.result.uuid
             )
         except Exception as err:
+            log.debug('File action failed: %r', action, exc_info=True)
             state.error = str(err)
         finally:
             state.complete.set()
@@ -206,6 +234,7 @@ class CPUExecutor:
                 bundle, action.path, state.result.file.name, state.result.uuid
             )
         except Exception as err:
+            log.debug('Bundle action failed: %r', action, exc_info=True)
             state.error = str(err)
         finally:
             state.complete.set()
