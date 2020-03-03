@@ -1,14 +1,32 @@
+import os
 import json
 from contextlib import asynccontextmanager
 
 from urllib.parse import urlencode
 
-from .http import connect_unix
+from .http import connect_unix, connect_tcp
 from .auth import read_config, server_name, resolve_auth, encode_header
 from .utils import cached_property
 
 
 CHUNK_SIZE = 65535
+
+_TCP_PROTO = 'tcp://'
+_UNIX_PROTO = 'unix://'
+_DOCKER_HOST = os.environ.get('DOCKER_HOST', 'unix:///var/run/docker.sock')
+if _DOCKER_HOST.startswith(_TCP_PROTO):
+    _HOST, _, _PORT_STR = _DOCKER_HOST[len(_TCP_PROTO):].partition(':')
+    _PORT = int(_PORT_STR)
+
+    def connect_docker(**kwargs):
+        return connect_tcp(_HOST, _PORT, **kwargs)
+elif _DOCKER_HOST.startswith(_UNIX_PROTO):
+    _PATH = _DOCKER_HOST[len(_UNIX_PROTO):]
+
+    def connect_docker(**kwargs):
+        return connect_unix(_PATH, **kwargs)
+else:
+    raise RuntimeError(f'Invalid DOCKER_HOST environ variable: {_DOCKER_HOST}')
 
 
 async def _recv_json(stream, response):
@@ -32,7 +50,7 @@ async def _recv_json(stream, response):
 async def _request_json(method, path, data=None, *, _ok_statuses=None):
     if _ok_statuses is None:
         _ok_statuses = frozenset({200, 201, 204})
-    async with connect_unix() as stream:
+    async with connect_docker() as stream:
         headers = [
             ('Host', 'localhost'),
             ('Connection', 'close'),
@@ -96,7 +114,7 @@ class Docker:
         uri = '/containers/{id}/resize'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect_unix() as stream:
+        async with connect_docker() as stream:
             await stream.send_request('POST', uri, [
                 ('Host', 'localhost'),
             ])
@@ -111,7 +129,7 @@ class Docker:
         uri = '/containers/{id}/start'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect_unix() as stream:
+        async with connect_docker() as stream:
             await stream.send_request('POST', uri, [
                 ('Host', 'localhost'),
             ])
@@ -132,7 +150,7 @@ class Docker:
     async def exec_start(self, id_, spec, stdin_proto, stdout_proto):
         assert isinstance(id_, str), id_
         uri = '/exec/{id}/start'.format(id=id_)
-        async with connect_unix(
+        async with connect_docker(
             stdin_proto=stdin_proto, stdout_proto=stdout_proto
         ) as stream:
             json_data = json.dumps(spec).encode('utf-8')
@@ -161,7 +179,7 @@ class Docker:
         uri = '/containers/{id}/attach'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect_unix(
+        async with connect_docker(
             stdin_proto=stdin_proto, stdout_proto=stdout_proto
         ) as stream:
             await stream.send_request('POST', uri, [
@@ -180,7 +198,7 @@ class Docker:
         uri = '/containers/{id}'.format(id=id_)
         if params:
             uri += '?' + urlencode(params)
-        async with connect_unix() as stream:
+        async with connect_docker() as stream:
             await stream.send_request('DELETE', uri, [
                 ('Host', 'localhost'),
             ])
@@ -200,7 +218,7 @@ class Docker:
             if auth_header:
                 headers.append(('X-Registry-Auth', auth_header))
 
-        async with connect_unix() as stream:
+        async with connect_docker() as stream:
             await stream.send_request('POST', uri, headers)
             response = await stream.recv_response()
             if response.status_code == 200:
@@ -218,7 +236,7 @@ class Docker:
         if auth_header:
             headers.append(('X-Registry-Auth', auth_header))
 
-        async with connect_unix() as stream:
+        async with connect_docker() as stream:
             await stream.send_request('POST', uri, headers)
             response = await stream.recv_response()
             if response.status_code == 200:
@@ -277,7 +295,7 @@ class Docker:
             ('Host', 'localhost'),
             ('transfer-encoding', 'chunked'),
         ]
-        async with connect_unix() as stream:
+        async with connect_docker() as stream:
             await stream.send_request('PUT', uri, headers, end_stream=False)
             while True:
                 chunk = arch.read(CHUNK_SIZE)
