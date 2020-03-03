@@ -42,7 +42,7 @@ async def _read_creds(creds_store, server):
 
 
 def _decode_auth(auth_data, server):
-    auth_data_decoded = base64.b64decode(auth_data)
+    auth_data_decoded = base64.b64decode(auth_data).decode('utf-8')
     username, _, password = auth_data_decoded.partition(':')
     return {
         'Username': username,
