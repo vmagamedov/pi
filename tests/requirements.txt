@@ -4,24 +4,49 @@
 #
 #    pip-compile tests/requirements.in
 #
-aiohttp==3.5.4
-async-timeout==3.0.1      # via aiohttp
-atomicwrites==1.3.0       # via pytest
-attrs==19.1.0             # via aiohttp, pytest
-chardet==3.0.4            # via aiohttp
-entrypoints==0.3          # via flake8
+aiohttp==3.7.4
+    # via -r requirements.in
+async-timeout==3.0.1
+    # via aiohttp
+atomicwrites==1.3.0
+    # via pytest
+attrs==19.1.0
+    # via
+    #   aiohttp
+    #   pytest
+chardet==3.0.4
+    # via aiohttp
+entrypoints==0.3
+    # via flake8
 flake8==3.7.7
-idna-ssl==1.1.0           # via aiohttp
-idna==2.8                 # via idna-ssl, yarl
-mccabe==0.6.1             # via flake8
-more-itertools==6.0.0     # via pytest
-multidict==4.5.2          # via aiohttp, yarl
-pluggy==0.9.0             # via pytest
-py==1.8.0                 # via pytest
-pycodestyle==2.5.0        # via flake8
-pyflakes==2.1.1           # via flake8
+    # via -r requirements.in
+idna==2.8
+    # via yarl
+mccabe==0.6.1
+    # via flake8
+more-itertools==6.0.0
+    # via pytest
+multidict==4.5.2
+    # via
+    #   aiohttp
+    #   yarl
+pluggy==0.9.0
+    # via pytest
+py==1.8.0
+    # via pytest
+pycodestyle==2.5.0
+    # via flake8
+pyflakes==2.1.1
+    # via flake8
 pytest-asyncio==0.10.0
+    # via -r requirements.in
 pytest==4.3.0
-six==1.12.0               # via pytest
-typing-extensions==3.7.2  # via aiohttp
-yarl==1.3.0               # via aiohttp
+    # via
+    #   -r requirements.in
+    #   pytest-asyncio
+six==1.12.0
+    # via pytest
+typing-extensions==3.7.2
+    # via aiohttp
+yarl==1.3.0
+    # via aiohttp
