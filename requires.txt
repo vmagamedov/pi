@@ -5,8 +5,14 @@
 #    pip-compile requires.in
 #
 click==7.0
+    # via -r requires.in
 h11==0.9.0
+    # via -r requires.in
 jinja2==2.10.3
-markupsafe==1.1.1         # via jinja2
-pyyaml==5.1.2
+    # via -r requires.in
+markupsafe==1.1.1
+    # via jinja2
+pyyaml==5.4
+    # via -r requires.in
 tabulate==0.8.5
+    # via -r requires.in
