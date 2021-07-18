@@ -165,7 +165,8 @@ async def run(docker, tty, image, command, *, init=None,
     c = await start(docker, image, command, init=init, tty=tty,
                     volumes=volumes,
                     ports=ports, environ=environ, work_dir=work_dir,
-                    network=network, network_alias=network_alias)
+                    network=network, network_alias=network_alias,
+                    entrypoint='')
     try:
         await docker.start(c['Id'])
         await attach(docker, c['Id'])
