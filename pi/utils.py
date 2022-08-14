@@ -3,7 +3,7 @@ import math
 import shlex
 import asyncio
 
-from collections import Sequence
+from collections.abc import Sequence
 
 
 class MessageType:
